@@ -2,6 +2,7 @@ import type { SeoConfig, SeoFeatures } from '../types.js'
 import { createAutoRedirectHook } from '../hooks/autoRedirect.js'
 import { createTrackSeoScoreGlobalHook, createTrackSeoScoreHook } from '../hooks/trackSeoScore.js'
 import { createIndexNowHook } from '../endpoints/indexNow.js'
+import { createSitemapCacheInvalidationHooks } from '../payload/technicalSeo/cache.js'
 
 interface HookRegistrationOptions {
   features: Required<SeoFeatures>
@@ -25,6 +26,15 @@ export function registerCollectionHooks<T extends Hookable>(
 ): T {
   const { features, trackHistory, redirectsSlug, basePath, seoConfig } = options
   const hooks = { ...(collection.hooks ?? {}) }
+  const sitemapCacheHooks = createSitemapCacheInvalidationHooks()
+  hooks.afterChange = [
+    ...existingHooks(hooks.afterChange),
+    sitemapCacheHooks.afterChange,
+  ]
+  hooks.afterDelete = [
+    ...existingHooks(hooks.afterDelete),
+    sitemapCacheHooks.afterDelete,
+  ]
   if (features.redirects) {
     hooks.beforeChange = [
       ...existingHooks(hooks.beforeChange),

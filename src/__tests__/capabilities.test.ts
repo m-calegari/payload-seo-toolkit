@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { seoAnalyzerPlugin } from '../plugin.js'
 import { createBackgroundServiceManager, type SeoBackgroundService } from '../plugin/backgroundServices.js'
 import { CORE_ENDPOINTS, createCapabilityRegistry } from '../plugin/capabilities.js'
+import { seoCache } from '../cache.js'
 
 function baseConfig() {
   return {
@@ -36,7 +37,46 @@ describe('M6 capability registry', () => {
     expect(config.onInit).toBeUndefined()
     const pages = config.collections.find((collection: any) => collection.slug === 'pages')
     expect(pages.hooks?.beforeChange ?? []).toHaveLength(0)
-    expect(pages.hooks?.afterChange ?? []).toHaveLength(0)
+    expect(pages.hooks?.afterChange ?? []).toHaveLength(1)
+    expect(pages.hooks?.afterDelete ?? []).toHaveLength(1)
+  })
+
+  it.each([
+    ['published document created', 'afterChange'],
+    ['published document slug changed', 'afterChange'],
+    ['published document becomes noindex', 'afterChange'],
+    ['published document unpublished', 'afterChange'],
+    ['document deleted', 'afterDelete'],
+  ] as const)('invalidates the core sitemap when a %s', async (_scenario, hookName) => {
+    const config = run()
+    const pages = config.collections.find((collection: any) => collection.slug === 'pages')
+    const hook = pages.hooks[hookName][0]
+    seoCache.set('sitemap-xml:pages,posts:test', '<urlset>stale</urlset>')
+
+    const doc = { id: 'page-1' }
+    await hook({ doc, req: {} })
+
+    expect(seoCache.get('sitemap-xml:pages,posts:test')).toBeNull()
+  })
+
+  it('registers core sitemap invalidation only on configured target collections', () => {
+    const config = run()
+    for (const slug of ['pages', 'posts']) {
+      const collection = config.collections.find((entry: any) => entry.slug === slug)
+      expect(collection.hooks?.afterChange).toHaveLength(1)
+      expect(collection.hooks?.afterDelete).toHaveLength(1)
+    }
+    for (const slug of ['media', 'seo-settings']) {
+      const collection = config.collections.find((entry: any) => entry.slug === slug)
+      if (slug === 'media') {
+        expect(collection.hooks?.afterChange ?? []).toHaveLength(0)
+        expect(collection.hooks?.afterDelete ?? []).toHaveLength(0)
+      } else {
+        expect(collection.hooks?.afterChange).toHaveLength(1)
+        expect(collection.hooks?.afterDelete).toHaveLength(1)
+      }
+    }
+    expect(config.onInit).toBeUndefined()
   })
 
   it.each([

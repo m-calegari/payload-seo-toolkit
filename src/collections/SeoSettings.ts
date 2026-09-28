@@ -217,7 +217,16 @@ export function createSeoSettingsCollection(targetCollections: readonly string[]
             { name: 'follow', type: 'checkbox', defaultValue: true },
             { name: 'sitemapEnabled', type: 'checkbox', defaultValue: true },
             { name: 'sitemapPriority', type: 'number', min: 0, max: 1, admin: { step: 0.1 } },
-            { name: 'sitemapChangeFrequency', type: 'select', options: SITEMAP_CHANGE_FREQUENCIES.map((value) => ({ label: value, value })) },
+            {
+              name: 'sitemapChangeFrequency',
+              type: 'select',
+              // Payload's SQL adapters otherwise derive
+              // `enum_seo_settings_technical_seo_collections_sitemap_change_frequency`,
+              // which exceeds the shared 63-character identifier limit. Keep the
+              // public field and column identity intact; only pin the DB enum name.
+              enumName: 'seo_settings_sitemap_frequency',
+              options: SITEMAP_CHANGE_FREQUENCIES.map((value) => ({ label: value, value })),
+            },
             { name: 'defaultSchemaType', type: 'select', options: TECHNICAL_SCHEMA_TYPES.map((value) => ({ label: value, value })) },
           ],
         }],
