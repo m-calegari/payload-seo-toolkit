@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { seoAnalyzerPlugin } from '../plugin.js'
+import { seoAnalyzerPlugin, seoPlugin } from '../plugin.js'
 
 // Minimal Payload config the plugin transforms. Cast loosely — we only assert what the plugin
 // adds (endpoints, collections, fields, hooks), not full Payload typing.
@@ -28,6 +28,9 @@ function run(pluginConfig: any) {
 }
 
 describe('seoAnalyzerPlugin — integration (config transform)', () => {
+  it('preserves the legacy seoPlugin alias', () => {
+    expect(seoPlugin).toBe(seoAnalyzerPlugin)
+  })
   it('registers the always-on endpoints', () => {
     const out = run({ collections: ['pages', 'posts'] })
     const p = paths(out)

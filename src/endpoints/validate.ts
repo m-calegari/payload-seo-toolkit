@@ -9,7 +9,7 @@
 
 import type { PayloadHandler } from 'payload'
 import { readAccessOpts } from '../helpers/readAccess.js'
-import { analyzeSeo } from '../index.js'
+import { analyzeSeo } from '../core/analyzer/index.js'
 import { loadMergedConfig } from '../helpers/loadMergedConfig.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
 import type { SeoInput, SeoConfig } from '../types.js'

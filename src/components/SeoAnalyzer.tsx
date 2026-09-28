@@ -2,14 +2,9 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAllFormFields } from '@payloadcms/ui'
-import {
-  analyzeSeo,
-  extractTextFromLexical,
-  type SeoAnalysis,
-  type SeoCheck,
-  type CheckCategory,
-  type RuleGroup,
-} from '../index.js'
+import { analyzeSeo } from '../core/analyzer/index.js'
+import { extractTextFromLexical } from '../helpers.js'
+import type { SeoAnalysis, SeoCheck, CheckCategory, RuleGroup } from '../types.js'
 import { SeoSocialPreview } from './SeoSocialPreview.js'
 import { useDashboardT, useSeoAnalysisLocale, type SeoAnalysisLocaleOptions } from '../hooks/useSeoLocale.js'
 import { type DashboardTranslations } from '../dashboard-i18n.js'

@@ -16,9 +16,8 @@ import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
 import { resolveGscSiteUrl } from '../helpers/gscClient.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
-import { fetchWithRetry } from '../helpers/fetchWithRetry.js'
 import { aiModel } from '../helpers/aiModel.js'
-import { providerHttpError } from '../helpers/providerError.js'
+import { requestAnthropicMessage } from '../integrations/ai/anthropic.js'
 import { hardenedRequest } from '../helpers/ssrfGuard.js'
 
 const ALT_MAX = 125
@@ -82,34 +81,20 @@ Rules:
 
   const userText = `Filename: ${context.filename}${context.title ? `\nPage/context: ${context.title}` : ''}\nWrite the alt text for this image:`
 
-  const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 150,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-            { type: 'text', text: userText },
-          ],
-        },
-      ],
-    }),
+  const data = await requestAnthropicMessage(apiKey, {
+    model,
+    max_tokens: 150,
+    system: systemPrompt,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+          { type: 'text', text: userText },
+        ],
+      },
+    ],
   })
-
-  if (!response.ok) {
-    throw providerHttpError('Anthropic', response)
-  }
-
-  const data = (await response.json()) as { stop_reason?: string; content?: Array<{ type: string; text?: string }> }
   if (data.stop_reason === 'refusal') return null
   const text = (data.content?.find((b) => b.type === 'text')?.text || '').trim().replace(/^["']|["']$/g, '')
   if (!text) return null

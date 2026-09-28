@@ -26,11 +26,10 @@
  */
 
 import type { Payload, PayloadHandler, PayloadRequest } from 'payload'
-import { analyzeSeo } from '../index.js'
+import { analyzeSeo } from '../core/analyzer/index.js'
 import { buildSeoInputFromDoc } from './validate.js'
 import { loadMergedConfig } from '../helpers/loadMergedConfig.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
-import { fetchWithRetry } from '../helpers/fetchWithRetry.js'
 import { extractDocContent } from '../helpers/extractDocContent.js'
 import {
   truncateWords,
@@ -41,7 +40,7 @@ import type { SeoConfig } from '../types.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
 import { DEFAULT_AI_MODEL } from '../helpers/aiModel.js'
 import { readAccessOpts } from '../helpers/readAccess.js'
-import { providerHttpError } from '../helpers/providerError.js'
+import { requestAnthropicMessage } from '../integrations/ai/anthropic.js'
 
 // Server-side rule bounds — match the SEO engine's expectations so applied values are compliant.
 const TITLE_HARD_MAX = 70
@@ -103,29 +102,12 @@ ${params.content.substring(0, 3000)}
 
 Return the optimized JSON now:`
 
-  const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    }),
+  const data = await requestAnthropicMessage(apiKey, {
+    model,
+    max_tokens: 1024,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
   })
-
-  if (!response.ok) {
-    throw providerHttpError('Anthropic', response)
-  }
-
-  const data = (await response.json()) as {
-    stop_reason?: string
-    content?: Array<{ type: string; text?: string }>
-  }
 
   // Safety classifier declined — let the caller fall back to the heuristic generators.
   if (data.stop_reason === 'refusal') {

@@ -14,12 +14,11 @@
 import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
-import { fetchWithRetry } from '../helpers/fetchWithRetry.js'
 import { extractDocContent } from '../helpers/extractDocContent.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
 import { aiModel } from '../helpers/aiModel.js'
 import { readAccessOpts } from '../helpers/readAccess.js'
-import { providerHttpError } from '../helpers/providerError.js'
+import { requestAnthropicMessage } from '../integrations/ai/anthropic.js'
 
 export interface ContentBrief {
   outline: Array<{ level: 'h2' | 'h3'; text: string }>
@@ -110,20 +109,12 @@ ${params.existingContent ? `Existing content (first 2000 chars, complement it â€
 
 Return the JSON brief now:`
 
-  const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({
-      model,
-      max_tokens: 1500,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    }),
+  const data = await requestAnthropicMessage(apiKey, {
+    model,
+    max_tokens: 1500,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
   })
-  if (!response.ok) {
-    throw providerHttpError('Anthropic', response)
-  }
-  const data = (await response.json()) as { stop_reason?: string; content?: Array<{ type: string; text?: string }> }
   if (data.stop_reason === 'refusal') return null
   const text = (data.content?.find((b) => b.type === 'text')?.text || '').trim()
   if (!text) return null

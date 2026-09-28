@@ -17,7 +17,7 @@
  * implement it via its own middleware.
  */
 import type { PayloadHandler } from 'payload'
-import { analyzeSeo } from '../index.js'
+import { analyzeSeo } from '../core/analyzer/index.js'
 import type { SeoConfig, SeoCheck } from '../types.js'
 import { buildSeoInputFromDoc } from './validate.js'
 import { loadMergedConfig } from '../helpers/loadMergedConfig.js'

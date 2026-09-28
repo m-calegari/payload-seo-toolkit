@@ -14,14 +14,13 @@ import type { PayloadHandler } from 'payload'
 import { readAccessOpts } from '../helpers/readAccess.js'
 import { extractDocContent as extractDocContentHelper } from '../helpers/extractDocContent.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
-import { fetchWithRetry } from '../helpers/fetchWithRetry.js'
 import {
   truncateWords,
   generateMetaTitle as heuristicTitle,
   generateMetaDescription as heuristicDescription,
 } from '../helpers/metaGeneration.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
-import { providerHttpError } from '../helpers/providerError.js'
+import { requestAnthropicMessage } from '../integrations/ai/anthropic.js'
 
 // ---------------------------------------------------------------------------
 // Claude API call
@@ -52,30 +51,12 @@ Page content (first 2000 chars): ${pageContent.substring(0, 2000)}
 
 Generate the optimized ${fieldLabel}:`
 
-  const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 200,
-      messages: [
-        { role: 'user', content: userPrompt },
-      ],
-      system: systemPrompt,
-    }),
+  const data = await requestAnthropicMessage(apiKey, {
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 200,
+    messages: [{ role: 'user', content: userPrompt }],
+    system: systemPrompt,
   })
-
-  if (!response.ok) {
-    throw providerHttpError('Anthropic', response)
-  }
-
-  const data = (await response.json()) as {
-    content: Array<{ type: string; text?: string }>
-  }
 
   const text = data.content?.[0]?.text || ''
   // Ensure it respects max length

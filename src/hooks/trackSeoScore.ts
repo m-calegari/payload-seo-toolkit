@@ -11,7 +11,7 @@
 
 import type { CollectionAfterChangeHook, GlobalAfterChangeHook } from 'payload'
 import type { SeoConfig } from '../types.js'
-import { analyzeSeo } from '../index.js'
+import { analyzeSeo } from '../core/analyzer/index.js'
 import { buildSeoInputFromDoc } from '../endpoints/validate.js'
 import { countWords } from '../helpers.js'
 import { extractDocContent } from '../helpers/extractDocContent.js'
