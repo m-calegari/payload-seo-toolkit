@@ -1,7 +1,7 @@
 {
   "name": "@consilioweb/payload-seo-analyzer",
   "version": "4.2.1",
-  "description": "Payload CMS SEO plugin — 50+ checks, dashboard, Lexical JSON support, Flesch FR/EN readability, i18n",
+  "description": "Modular SEO toolkit for Payload CMS 3 with technical SEO policy, health analysis, and opt-in integrations",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -38,15 +38,20 @@
       }
     }
   },
-  "bin": {
-    "seo-analyzer-uninstall": "./scripts/uninstall.mjs"
-  },
   "files": [
     "dist",
-    "scripts",
-    "!scripts/__tests__",
-    "!scripts/verify-dist-imports.mjs",
+    "docs/background-services.md",
+    "docs/configuration.md",
+    "docs/development.md",
+    "docs/integrations.md",
+    "docs/migration.md",
+    "docs/modules.md",
+    "docs/public-api.md",
+    "docs/routing.md",
+    "docs/security.md",
     "README.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
     "LICENSE"
   ],
   "sideEffects": [
@@ -91,14 +96,6 @@
     "redirects",
     "typescript"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/pOwn3d/payload-seo-analyzer.git"
-  },
-  "homepage": "https://github.com/pOwn3d/payload-seo-analyzer#readme",
-  "bugs": {
-    "url": "https://github.com/pOwn3d/payload-seo-analyzer/issues"
-  },
   "author": "ConsilioWEB <contact@consilioweb.fr> (https://consilioweb.fr)",
   "license": "MIT",
   "packageManager": "pnpm@11.25.0",

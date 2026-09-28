@@ -34,7 +34,7 @@ export interface SeoPluginConfig {
   siteUrl?: string
   /** Base path for API endpoints (default: '/seo-plugin') */
   endpointBasePath?: string
-  /** Whether to track SEO score history (adds a collection + afterChange hook, default: true) */
+  /** Legacy alias for the scoreHistory module. Omitted by default in core-only mode. */
   trackScoreHistory?: boolean
   /** Whether to add the sitemap audit view at /admin/sitemap-audit (default: true) */
   addSitemapAuditView?: boolean

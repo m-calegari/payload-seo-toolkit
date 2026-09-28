@@ -5,6 +5,25 @@ All notable changes to `@consilioweb/payload-seo-analyzer` will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Reorganized the plugin around a core-only default with explicit modules, integrations, and
+  background services.
+- Added canonical URL, technical SEO policy, Admin configuration, and normalized SEO health layers.
+- Rewrote package documentation around the current configuration and security contracts.
+- Removed inherited repository URLs that do not identify this fork's verified release home.
+- Removed the source-rewriting uninstall binary and scripts from published package contents.
+
+### Security
+
+- Caller-scoped reads respect Payload ACLs; public output uses anonymous eligibility.
+- AI document authorization occurs before provider-bound extraction.
+- Outbound URL handling pins validated addresses and revalidates redirects.
+
+No release date or release version is assigned to these changes yet.
+
 ## [4.2.1] - 2026-09-23
 
 Fixes what 4.2.0 left inconsistent, plus four defects found by running the plugin in a real admin

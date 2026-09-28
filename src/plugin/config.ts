@@ -1,6 +1,7 @@
 import type { SeoConfig, SeoFeatures } from '../types.js'
 import type { SeoPluginConfig } from './types.js'
 import { capabilitiesToLegacyFeatures, createCapabilityRegistry, type SeoCapabilityRegistry } from './capabilities.js'
+import { normalizeSiteOrigin } from '../core/urls/index.js'
 
 export interface NormalizedPluginConfig {
   targetCollections: string[]
@@ -33,7 +34,19 @@ export function buildSeoConfig(pluginConfig: SeoPluginConfig): SeoConfig {
   }
 }
 
+export function validatePluginConfiguration(pluginConfig: SeoPluginConfig): void {
+  if (pluginConfig.siteUrl !== undefined && normalizeSiteOrigin(pluginConfig.siteUrl) === null) {
+    throw new Error('[seo-analyzer] Invalid siteUrl: expected an absolute HTTP(S) origin without credentials.')
+  }
+  for (const [collection, route] of Object.entries(pluginConfig.collectionRoutes ?? {})) {
+    if (typeof route !== 'string' || route.includes('://') || /[?#]/.test(route) || route.split('/').includes('..')) {
+      throw new Error(`[seo-analyzer] Invalid collection route for "${collection}": expected a relative path prefix without a scheme, query, fragment, or ".." segment.`)
+    }
+  }
+}
+
 export function normalizePluginConfig(pluginConfig: SeoPluginConfig): NormalizedPluginConfig {
+  validatePluginConfiguration(pluginConfig)
   const capabilities = createCapabilityRegistry(pluginConfig)
   return {
     targetCollections: pluginConfig.collections ?? ['pages', 'posts'],
