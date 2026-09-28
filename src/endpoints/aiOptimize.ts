@@ -18,7 +18,7 @@
  * the client request). Without a key, the endpoint falls back to the heuristic generators, so
  * the feature degrades gracefully.
  *
- * Model: defaults to `claude-opus-4-8` (highest quality), overridable via SEO_AI_MODEL.
+ * Model: see helpers/aiModel (Sonnet 4.6 by default), overridable via SEO_AI_MODEL.
  *
  * NOTE: Rate limiting is not handled by this plugin. The consuming application should
  * implement rate limiting via its own middleware. Calls to the Anthropic API are billed to
@@ -39,9 +39,7 @@ import {
 } from '../helpers/metaGeneration.js'
 import type { SeoConfig } from '../types.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
-
-// Default to Sonnet (quality/cost balance); set SEO_AI_MODEL=claude-opus-4-8 for max quality.
-const DEFAULT_MODEL = 'claude-sonnet-4-6'
+import { DEFAULT_AI_MODEL } from '../helpers/aiModel.js'
 
 // Server-side rule bounds — match the SEO engine's expectations so applied values are compliant.
 const TITLE_HARD_MAX = 70
@@ -249,7 +247,7 @@ export async function optimizeDocMeta(
 
   // 2. PROPOSE — Claude if configured, else heuristic fallback
   const apiKey = opts.apiKey
-  const model = opts.model || DEFAULT_MODEL
+  const model = opts.model || DEFAULT_AI_MODEL
 
   let suggestions: AiSuggestions
   let method: 'ai' | 'heuristic'

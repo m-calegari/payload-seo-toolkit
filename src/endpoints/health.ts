@@ -12,6 +12,7 @@ import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
 import { seoCache } from '../cache.js'
 import { getGscOAuthConfig, getOrCreateGscAuthDoc } from '../helpers/gscClient.js'
+import { aiModel } from '../helpers/aiModel.js'
 
 import { isSeoAdminRequest as isAdmin } from '../helpers/isAdmin.js'
 
@@ -23,7 +24,7 @@ export function createSeoHealthHandler(basePath: string, seoConfig?: SeoConfig):
       // --- Env configuration (booleans only, never the values) ---
       const config = {
         aiKey: !!process.env.ANTHROPIC_API_KEY,
-        aiModel: process.env.SEO_AI_MODEL || 'claude-opus-4-8',
+        aiModel: aiModel(),
         pageSpeedKey: !!(process.env.PAGESPEED_API_KEY || process.env.GOOGLE_PAGESPEED_API_KEY),
         gscConfigured: !!getGscOAuthConfig(basePath, seoConfig),
         gscEncryptionKey: !!process.env.SEO_GSC_ENCRYPTION_KEY,

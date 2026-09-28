@@ -9,7 +9,7 @@
  * context so the brief complements (not duplicates) what already exists.
  *
  * Gated behind `features.aiFeatures`. Key from ANTHROPIC_API_KEY (server only), model from
- * SEO_AI_MODEL (default claude-opus-4-8). No heuristic fallback — a brief needs the model.
+ * SEO_AI_MODEL (default: see helpers/aiModel). No heuristic fallback — a brief needs the model.
  */
 import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
@@ -17,9 +17,7 @@ import { parseJsonBody } from '../helpers/parseBody.js'
 import { fetchWithRetry } from '../helpers/fetchWithRetry.js'
 import { extractDocContent } from '../helpers/extractDocContent.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
-
-// Default to Sonnet (quality/cost balance); set SEO_AI_MODEL=claude-opus-4-8 for max quality.
-const DEFAULT_MODEL = 'claude-sonnet-4-6'
+import { aiModel } from '../helpers/aiModel.js'
 
 export interface ContentBrief {
   outline: Array<{ level: 'h2' | 'h3'; text: string }>
@@ -178,7 +176,7 @@ export function createAiContentBriefHandler(
         }
       }
 
-      const model = process.env.SEO_AI_MODEL || DEFAULT_MODEL
+      const model = aiModel()
       const language = seoConfig?.locale === 'en' ? 'en' : 'fr'
 
       let brief: ContentBrief | null

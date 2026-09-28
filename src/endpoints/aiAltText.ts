@@ -7,7 +7,7 @@
  *                          - { id, apply:true, altText:"..." }   → write the provided text (no LLM call)
  *
  * Gated behind `features.aiFeatures`. The API key is read only from ANTHROPIC_API_KEY (server
- * side). Model defaults to `claude-opus-4-8` (vision-capable), overridable via SEO_AI_MODEL.
+ * side). Model: see helpers/aiModel (Sonnet 4.6, vision-capable), overridable via SEO_AI_MODEL.
  *
  * Security: the image is fetched server-side and must be on the configured site origin (or
  * SEO_MEDIA_ORIGIN) — SSRF-safe, consistent with the Core Web Vitals endpoint.
@@ -17,9 +17,8 @@ import type { SeoConfig } from '../types.js'
 import { resolveGscSiteUrl } from '../helpers/gscClient.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
 import { fetchWithRetry } from '../helpers/fetchWithRetry.js'
+import { aiModel } from '../helpers/aiModel.js'
 
-// Sonnet 4.6 is vision-capable; set SEO_AI_MODEL=claude-opus-4-8 for max quality.
-const DEFAULT_MODEL = 'claude-sonnet-4-6'
 const ALT_MAX = 125
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024 // 5 MB
 
@@ -243,7 +242,7 @@ export function createAiAltTextHandler(uploadsCollection: string, seoConfig?: Se
         return Response.json({ error: `Could not fetch image: ${e instanceof Error ? e.message : 'error'}` }, { status: 502 })
       }
 
-      const model = process.env.SEO_AI_MODEL || DEFAULT_MODEL
+      const model = aiModel()
       const language = seoConfig?.locale === 'en' ? 'en' : 'fr'
 
       let alt: string | null
