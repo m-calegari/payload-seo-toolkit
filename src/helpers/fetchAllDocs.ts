@@ -34,6 +34,8 @@ export interface FetchAllDocsOptions {
    * Applied best-effort — see the select-less retry below.
    */
   select?: Record<string, true>
+  /** Anonymous public reads apply collection access; internal analysis is explicitly privileged. */
+  access?: 'internal' | 'public'
 }
 
 /** Page size for the internal paginated reads. */
@@ -51,7 +53,8 @@ export async function fetchAllDocs(
   payload: Payload,
   options: FetchAllDocsOptions,
 ): Promise<FetchedDoc[]> {
-  const { collections, globals = [], depth = 1, select } = options
+  const { collections, globals = [], depth = 1, select, access = 'internal' } = options
+  const overrideAccess = access === 'internal'
   const maxDocs = options.maxDocs ?? options.limit ?? (Number(process.env.SEO_FETCH_MAX_DOCS) || 5000)
   const results: FetchedDoc[] = []
   let reachedCap = false
@@ -71,7 +74,7 @@ export async function fetchAllDocs(
               limit: PAGE_SIZE,
               page,
               depth,
-              overrideAccess: true,
+              overrideAccess,
               ...(select ? { select } : {}),
             })
           } catch (selectErr) {
@@ -88,7 +91,7 @@ export async function fetchAllDocs(
               limit: PAGE_SIZE,
               page,
               depth,
-              overrideAccess: true,
+              overrideAccess,
             })
           }
         } catch (err) {
@@ -135,7 +138,7 @@ export async function fetchAllDocs(
       const doc = await payload.findGlobal({
         slug: globalSlug,
         depth,
-        overrideAccess: true,
+        overrideAccess,
       })
       if (doc) {
         results.push({ doc, sourceType: 'global', sourceSlug: globalSlug })

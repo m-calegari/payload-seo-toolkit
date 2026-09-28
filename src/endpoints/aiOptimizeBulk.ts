@@ -137,6 +137,8 @@ export function createAiOptimizeBulkHandler(
             mergedConfig,
             apiKey,
             model,
+            // This endpoint is administrator-only and intentionally performs batch-wide work.
+            readAccess: { overrideAccess: true },
           })
           if (!r.ok || !r.current || !r.suggestions) {
             results.push({

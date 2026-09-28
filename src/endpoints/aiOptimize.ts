@@ -25,7 +25,7 @@
  * the host's own API key.
  */
 
-import type { Payload, PayloadHandler } from 'payload'
+import type { Payload, PayloadHandler, PayloadRequest } from 'payload'
 import { analyzeSeo } from '../index.js'
 import { buildSeoInputFromDoc } from './validate.js'
 import { loadMergedConfig } from '../helpers/loadMergedConfig.js'
@@ -40,6 +40,8 @@ import {
 import type { SeoConfig } from '../types.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
 import { DEFAULT_AI_MODEL } from '../helpers/aiModel.js'
+import { readAccessOpts } from '../helpers/readAccess.js'
+import { providerHttpError } from '../helpers/providerError.js'
 
 // Server-side rule bounds — match the SEO engine's expectations so applied values are compliant.
 const TITLE_HARD_MAX = 70
@@ -117,8 +119,7 @@ Return the optimized JSON now:`
   })
 
   if (!response.ok) {
-    const errorBody = await response.text()
-    throw new Error(`Claude API error ${response.status}: ${errorBody}`)
+    throw providerHttpError('Anthropic', response)
   }
 
   const data = (await response.json()) as {
@@ -218,13 +219,20 @@ export interface OptimizeMetaResult {
  */
 export async function optimizeDocMeta(
   payload: Payload,
-  opts: { collection: string; id: string; mergedConfig: SeoConfig; apiKey?: string; model?: string },
+  opts: {
+    collection: string
+    id: string
+    mergedConfig: SeoConfig
+    apiKey?: string
+    model?: string
+    readAccess: { overrideAccess: boolean; user?: PayloadRequest['user'] }
+  },
 ): Promise<OptimizeMetaResult> {
   const { collection, id, mergedConfig } = opts
 
   let doc: Record<string, unknown>
   try {
-    doc = (await payload.findByID({ collection, id, depth: 1, overrideAccess: true })) as Record<string, unknown>
+    doc = (await payload.findByID({ collection, id, depth: 1, ...opts.readAccess })) as Record<string, unknown>
   } catch {
     return { ok: false, error: `Document not found: ${collection}/${id}`, status: 404 }
   }
@@ -340,6 +348,7 @@ export function createAiOptimizeHandler(
         mergedConfig,
         apiKey: process.env.ANTHROPIC_API_KEY,
         model: process.env.SEO_AI_MODEL,
+        readAccess: readAccessOpts(req),
       })
 
       if (!r.ok) {

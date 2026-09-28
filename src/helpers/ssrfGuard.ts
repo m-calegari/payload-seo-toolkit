@@ -15,6 +15,8 @@
  * re-checked with the IPv4 rules.
  */
 import { promises as dns } from 'dns'
+import http, { type IncomingHttpHeaders, type RequestOptions } from 'node:http'
+import https from 'node:https'
 
 /** Ports the checker is allowed to reach — anything else is internal-service scanning. */
 const ALLOWED_PORTS = new Set(['', '80', '443'])
@@ -29,7 +31,11 @@ function isPrivateIPv4(a: number, b: number, c: number, d: number): boolean {
   if (a === 172 && b >= 16 && b <= 31) return true           // 172.16.0.0/12
   if (a === 192 && b === 0 && c === 0) return true           // 192.0.0.0/24 IETF protocol assignments
   if (a === 192 && b === 168) return true                    // 192.168.0.0/16
+  if (a === 192 && b === 0 && c === 2) return true            // TEST-NET-1
+  if (a === 192 && b === 88 && c === 99) return true          // deprecated 6to4 relay
   if (a === 198 && (b === 18 || b === 19)) return true        // 198.18.0.0/15 benchmarking
+  if (a === 198 && b === 51 && c === 100) return true         // TEST-NET-2
+  if (a === 203 && b === 0 && c === 113) return true          // TEST-NET-3
   if (a >= 224) return true                                  // 224.0.0.0/4 multicast + 240.0.0.0/4 reserved
   return false
 }
@@ -132,7 +138,10 @@ export function isPrivateIP(rawIp: string): boolean {
   if (g.slice(0, 7).every((x) => x === 0) && g[7] === 1) return true     // ::1 loopback
   if ((g[0] & 0xfe00) === 0xfc00) return true                            // fc00::/7 unique-local
   if ((g[0] & 0xffc0) === 0xfe80) return true                            // fe80::/10 link-local
+  if ((g[0] & 0xffc0) === 0xfec0) return true                            // fec0::/10 deprecated site-local
   if ((g[0] & 0xff00) === 0xff00) return true                            // ff00::/8 multicast
+  if (g[0] === 0x2001 && g[1] === 0x0db8) return true                    // documentation
+  if (g[0] === 0x0100 && g.slice(1).every((x) => x === 0)) return true   // discard-only 100::/64
   return false
 }
 
@@ -146,6 +155,7 @@ export function isPrivateUrl(urlString: string): boolean {
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return true
+  if (parsed.username || parsed.password) return true
   // Port allowlist: without it the checker doubles as an internal port scanner.
   if (!ALLOWED_PORTS.has(parsed.port)) return true
 
@@ -185,4 +195,112 @@ export async function isUrlBlocked(url: string): Promise<boolean> {
     return true
   }
   return false
+}
+
+export interface HardenedResponse {
+  status: number
+  ok: boolean
+  headers: IncomingHttpHeaders
+  body: Uint8Array
+  url: string
+}
+
+type LookupResult = { address: string; family: number }
+type Resolver = (hostname: string) => Promise<LookupResult[]>
+type RequestFn = typeof http.request
+
+export interface HardenedRequestOptions {
+  method?: 'GET' | 'HEAD'
+  headers?: Record<string, string>
+  timeoutMs?: number
+  maxRedirects?: number
+  maxResponseBytes?: number
+  allowedOrigins?: ReadonlySet<string>
+  /** Test seam: production callers must use the defaults. */
+  resolver?: Resolver
+  /** Test seam used to prove the validated address is pinned at connect time. */
+  transports?: { http: RequestFn; https: RequestFn }
+}
+
+function parseAllowedUrl(raw: string, allowedOrigins?: ReadonlySet<string>): URL {
+  const url = new URL(raw)
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('blocked-url')
+  if (url.username || url.password) throw new Error('blocked-url')
+  if (!ALLOWED_PORTS.has(url.port)) throw new Error('blocked-url')
+  if (allowedOrigins && !allowedOrigins.has(url.origin)) throw new Error('blocked-origin')
+  return url
+}
+
+/**
+ * HTTP(S) request whose socket lookup is pinned to an address already validated here.
+ * The original hostname remains in request options, preserving Host and TLS SNI.
+ */
+export async function hardenedRequest(
+  input: string,
+  options: HardenedRequestOptions = {},
+): Promise<HardenedResponse> {
+  const resolver: Resolver = options.resolver ?? (async (hostname) => dns.lookup(hostname, { all: true }))
+  const transports = options.transports ?? { http: http.request, https: https.request }
+  const maxRedirects = options.maxRedirects ?? 5
+  const timeoutMs = options.timeoutMs ?? 5_000
+  const maxBytes = options.maxResponseBytes ?? 1024 * 1024
+  let current = input
+
+  for (let hop = 0; hop <= maxRedirects; hop++) {
+    const url = parseAllowedUrl(current, options.allowedOrigins)
+    if (isPrivateUrl(url.toString())) throw new Error('blocked-private-ip')
+    const hostname = url.hostname.startsWith('[') ? url.hostname.slice(1, -1) : url.hostname
+    const addresses = await resolver(hostname)
+    if (!addresses.length || addresses.some((entry) => isPrivateIP(entry.address))) {
+      throw new Error('blocked-private-ip')
+    }
+    const pinned = addresses[0]
+
+    const response = await new Promise<HardenedResponse>((resolve, reject) => {
+      const requestOptions: RequestOptions = {
+        protocol: url.protocol,
+        hostname,
+        port: url.port || undefined,
+        path: `${url.pathname}${url.search}`,
+        method: options.method ?? 'GET',
+        headers: options.headers,
+        lookup: (_name, _lookupOptions, callback) => callback(null, pinned.address, pinned.family),
+      }
+      const request = (url.protocol === 'https:' ? transports.https : transports.http)(requestOptions, (res) => {
+        const chunks: Buffer[] = []
+        let size = 0
+        res.on('data', (chunk: Buffer | string) => {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+          size += buffer.length
+          if (size > maxBytes) {
+            request.destroy(new Error('response-too-large'))
+            return
+          }
+          chunks.push(buffer)
+        })
+        res.on('end', () => resolve({
+          status: res.statusCode ?? 0,
+          ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
+          headers: res.headers,
+          body: Buffer.concat(chunks),
+          url: url.toString(),
+        }))
+      })
+      request.setTimeout(timeoutMs, () => request.destroy(new Error('timeout')))
+      request.on('error', reject)
+      request.end()
+    })
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = Array.isArray(response.headers.location)
+        ? response.headers.location[0]
+        : response.headers.location
+      if (!location) return response
+      if (hop === maxRedirects) throw new Error('too-many-redirects')
+      current = new URL(location, url).toString()
+      continue
+    }
+    return response
+  }
+  throw new Error('too-many-redirects')
 }

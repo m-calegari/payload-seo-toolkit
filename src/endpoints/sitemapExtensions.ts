@@ -21,6 +21,7 @@ import type { Payload, PayloadHandler } from 'payload'
 import { buildDocPath } from '../helpers/docUrl.js'
 import { seoCache } from '../cache.js'
 import type { SeoConfig } from '../types.js'
+import { isPublicSeoDocument, publicSeoReadAccess } from '../helpers/publicSeoDocument.js'
 
 /**
  * Cache key bases for the three rendered documents, scoped by the collections the
@@ -105,7 +106,8 @@ async function eachPublishedDoc(
       let page = 1
       let hasMore = true
       while (hasMore) {
-        const res = await payload.find({ collection, limit: BATCH, page, depth, overrideAccess: true })
+        // Anonymous sitemap reads must respect the collection's public access policy.
+        const res = await payload.find({ collection, limit: BATCH, page, depth, ...publicSeoReadAccess })
         for (const doc of res.docs as Record<string, unknown>[]) {
           // EVERY document read counts against the cap, filtered ones included — the cap
           // bounds the WORK this anonymous endpoint does, not the size of its output.
@@ -115,10 +117,9 @@ async function eachPublishedDoc(
           // same way.
           if (count >= MAX) return
           count++
-          if (doc._status === 'draft') continue
+          if (!isPublicSeoDocument(doc)) continue
           // Same noindex filter as sitemap.xml / llms.txt: news, image and video
           // sitemaps are public too.
-          if (doc.noindex === true || (doc.meta as Record<string, unknown> | undefined)?.noindex === true) continue
           onDoc(doc, collection)
         }
         hasMore = res.hasNextPage

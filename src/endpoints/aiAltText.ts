@@ -18,6 +18,8 @@ import { resolveGscSiteUrl } from '../helpers/gscClient.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
 import { fetchWithRetry } from '../helpers/fetchWithRetry.js'
 import { aiModel } from '../helpers/aiModel.js'
+import { providerHttpError } from '../helpers/providerError.js'
+import { hardenedRequest } from '../helpers/ssrfGuard.js'
 
 const ALT_MAX = 125
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -104,8 +106,7 @@ Rules:
   })
 
   if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`Claude API error ${response.status}: ${body}`)
+    throw providerHttpError('Anthropic', response)
   }
 
   const data = (await response.json()) as { stop_reason?: string; content?: Array<{ type: string; text?: string }> }
@@ -231,14 +232,23 @@ export function createAiAltTextHandler(uploadsCollection: string, seoConfig?: Se
       // Fetch the image bytes server-side (SSRF-checked above) and base64-encode for the API.
       let base64: string
       try {
-        const imgResp = await fetch(imageUrl)
+        const allowedOrigins = new Set<string>()
+        if (siteUrl) allowedOrigins.add(new URL(siteUrl).origin)
+        if (process.env.SEO_MEDIA_ORIGIN) allowedOrigins.add(new URL(process.env.SEO_MEDIA_ORIGIN).origin)
+        const imgResp = await hardenedRequest(imageUrl, {
+          method: 'GET',
+          allowedOrigins,
+          maxRedirects: 5,
+          timeoutMs: 15_000,
+          maxResponseBytes: MAX_IMAGE_BYTES,
+        })
         if (!imgResp.ok) throw new Error(`fetch ${imgResp.status}`)
-        const buf = Buffer.from(await imgResp.arrayBuffer())
-        if (buf.byteLength > MAX_IMAGE_BYTES) {
-          return Response.json({ error: 'Image too large for vision (max 5 MB).' }, { status: 413 })
-        }
+        const buf = Buffer.from(imgResp.body)
         base64 = buf.toString('base64')
       } catch (e) {
+        if (e instanceof Error && e.message === 'response-too-large') {
+          return Response.json({ error: 'Image too large for vision (max 5 MB).' }, { status: 413 })
+        }
         return Response.json({ error: `Could not fetch image: ${e instanceof Error ? e.message : 'error'}` }, { status: 502 })
       }
 

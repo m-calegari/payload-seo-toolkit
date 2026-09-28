@@ -10,7 +10,7 @@
  */
 
 import type { PayloadHandler } from 'payload'
-import { isUrlBlocked } from '../helpers/ssrfGuard.js'
+import { hardenedRequest } from '../helpers/ssrfGuard.js'
 import { seoCache } from '../cache.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
@@ -179,61 +179,24 @@ async function asyncPool<T, R>(
 // ---------------------------------------------------------------------------
 
 async function checkUrl(url: string): Promise<CachedResult> {
-  // SSRF protection on the initial URL.
-  if (await isUrlBlocked(url)) {
-    return { status: 0, ok: false, error: 'blocked-private-ip', checkedAt: Date.now() }
-  }
-
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 5000)
-  const MAX_REDIRECTS = 5
-
   try {
-    let currentUrl = url
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      const response = await fetch(currentUrl, {
-        method: 'HEAD',
-        signal: controller.signal,
-        // Manual redirects: re-validate every hop, so a public URL can't 3xx us
-        // onto an internal/metadata address (169.254.169.254, localhost, …).
-        redirect: 'manual',
-        headers: {
-          'User-Agent': 'SeoAnalyzer-LinkChecker/1.0',
-        },
-      })
-
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get('location')
-        if (!location || hop === MAX_REDIRECTS) {
-          return { status: response.status, ok: false, error: 'too-many-redirects', checkedAt: Date.now() }
-        }
-        let nextUrl: string
-        try {
-          nextUrl = new URL(location, currentUrl).toString()
-        } catch {
-          return { status: response.status, ok: false, error: 'connection', checkedAt: Date.now() }
-        }
-        if (await isUrlBlocked(nextUrl)) {
-          return { status: 0, ok: false, error: 'blocked-private-ip', checkedAt: Date.now() }
-        }
-        currentUrl = nextUrl
-        continue
-      }
-
-      return {
-        status: response.status,
-        ok: response.ok,
-        checkedAt: Date.now(),
-      }
-    }
-
-    // Redirect budget exhausted without a terminal response.
-    return { status: 0, ok: false, error: 'too-many-redirects', checkedAt: Date.now() }
+    const response = await hardenedRequest(url, {
+      method: 'HEAD',
+      timeoutMs: 5_000,
+      maxRedirects: 5,
+      maxResponseBytes: 0,
+      headers: { 'User-Agent': 'SeoAnalyzer-LinkChecker/1.0' },
+    })
+    return { status: response.status, ok: response.ok, checkedAt: Date.now() }
   } catch (err: unknown) {
     let errorType = 'connection'
     if (err instanceof Error) {
-      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+      if (err.message === 'timeout') {
         errorType = 'timeout'
+      } else if (err.message === 'blocked-private-ip' || err.message === 'blocked-url') {
+        errorType = 'blocked-private-ip'
+      } else if (err.message === 'too-many-redirects') {
+        errorType = 'too-many-redirects'
       } else if (err.message.includes('ENOTFOUND') || err.message.includes('getaddrinfo')) {
         errorType = 'dns'
       } else if (err.message.includes('ECONNREFUSED')) {
@@ -248,8 +211,6 @@ async function checkUrl(url: string): Promise<CachedResult> {
       error: errorType,
       checkedAt: Date.now(),
     }
-  } finally {
-    clearTimeout(timeoutId)
   }
 }
 

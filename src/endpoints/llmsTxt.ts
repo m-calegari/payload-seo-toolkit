@@ -15,6 +15,7 @@ import type { PayloadHandler } from 'payload'
 import { buildDocPath } from '../helpers/docUrl.js'
 import type { SeoConfig } from '../types.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
+import { isPublicSeoDocument } from '../helpers/publicSeoDocument.js'
 
 /** Recommended max size for llms.txt (~8 KB per llmstxt.org guidance). */
 const MAX_BYTES = 8 * 1024
@@ -114,6 +115,7 @@ export function createLlmsTxtHandler(
         collections: targetCollections,
         depth: 0,
         maxDocs: 1000,
+        access: 'public',
       })
 
       // Group indexable docs by collection → one section per collection.
@@ -122,8 +124,7 @@ export function createLlmsTxtHandler(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const d = doc as any
         // Skip drafts / explicitly non-indexed docs.
-        if (d._status && d._status !== 'published') continue
-        if (d.noindex === true || d?.meta?.noindex === true) continue
+        if (!isPublicSeoDocument(d)) continue
         const slug: string = (d.slug as string) || ''
         if (!slug) continue
         const path = buildDocPath(slug, sourceSlug, seoConfig?.collectionRoutes)

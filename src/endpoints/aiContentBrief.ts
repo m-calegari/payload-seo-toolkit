@@ -18,6 +18,8 @@ import { fetchWithRetry } from '../helpers/fetchWithRetry.js'
 import { extractDocContent } from '../helpers/extractDocContent.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
 import { aiModel } from '../helpers/aiModel.js'
+import { readAccessOpts } from '../helpers/readAccess.js'
+import { providerHttpError } from '../helpers/providerError.js'
 
 export interface ContentBrief {
   outline: Array<{ level: 'h2' | 'h3'; text: string }>
@@ -119,8 +121,7 @@ Return the JSON brief now:`
     }),
   })
   if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`Claude API error ${response.status}: ${body}`)
+    throw providerHttpError('Anthropic', response)
   }
   const data = (await response.json()) as { stop_reason?: string; content?: Array<{ type: string; text?: string }> }
   if (data.stop_reason === 'refusal') return null
@@ -168,11 +169,13 @@ export function createAiContentBriefHandler(
       const id = body.id != null ? String(body.id) : undefined
       if (collection && id && (!targetCollections || targetCollections.includes(collection))) {
         try {
-          const doc = (await req.payload.findByID({ collection, id, depth: 1, overrideAccess: true })) as Record<string, unknown>
+          const doc = (await req.payload.findByID({ collection, id, depth: 1, ...readAccessOpts(req) })) as Record<string, unknown>
           pageTitle = (doc.title as string) || undefined
           existingContent = extractDocContent(doc).text || undefined
         } catch {
-          // ignore — brief without page context
+          // Do not silently downgrade to a context-free provider call: the caller
+          // explicitly selected a document they are not allowed to read.
+          return Response.json({ error: 'Document not found or not accessible.' }, { status: 404 })
         }
       }
 

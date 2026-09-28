@@ -21,6 +21,7 @@ import {
   generateMetaDescription as heuristicDescription,
 } from '../helpers/metaGeneration.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
+import { providerHttpError } from '../helpers/providerError.js'
 
 // ---------------------------------------------------------------------------
 // Claude API call
@@ -69,8 +70,7 @@ Generate the optimized ${fieldLabel}:`
   })
 
   if (!response.ok) {
-    const errorBody = await response.text()
-    throw new Error(`Claude API error ${response.status}: ${errorBody}`)
+    throw providerHttpError('Anthropic', response)
   }
 
   const data = (await response.json()) as {
