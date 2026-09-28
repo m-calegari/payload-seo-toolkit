@@ -18,7 +18,8 @@
  * anonymous caller, so the shared entry is neither an oracle nor a cross-user leak.
  */
 import type { Payload, PayloadHandler } from 'payload'
-import { buildDocPath } from '../helpers/docUrl.js'
+import { resolveDocumentPath, resolveDocumentUrl } from '../core/urls/resolver.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 import { seoCache } from '../cache.js'
 import type { SeoConfig } from '../types.js'
 import { isPublicSeoDocument, publicSeoReadAccess } from '../helpers/publicSeoDocument.js'
@@ -39,19 +40,6 @@ function escapeXml(str: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;')
-}
-
-function resolveSiteUrl(seoConfig?: SeoConfig): string {
-  return (seoConfig?.siteUrl || process.env.NEXT_PUBLIC_SERVER_URL || process.env.PAYLOAD_PUBLIC_SERVER_URL || '').replace(/\/$/, '')
-}
-
-/**
- * Site-relative path of a document. Delegates to the shared builder so these
- * sitemaps carry the same collection route prefix as sitemap.xml, the canonical
- * and the JSON-LD (posts → /posts/<slug> by default).
- */
-function docPath(slug: string, collection?: string, seoConfig?: SeoConfig): string {
-  return buildDocPath(slug, collection, seoConfig?.collectionRoutes)
 }
 
 function xmlResponse(xml: string, status = 200): Response {
@@ -143,7 +131,8 @@ export function createNewsSitemapHandler(targetCollections: string[], seoConfig?
       const cachedXml = seoCache.get<string>(cacheKey)
       if (typeof cachedXml === 'string') return xmlResponse(cachedXml)
 
-      const siteUrl = resolveSiteUrl(seoConfig)
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const siteUrl = siteModel.origin ?? ''
       const language = seoConfig?.locale === 'en' ? 'en' : 'fr'
       // Publication name: configured siteName, else the host.
       let publication = seoConfig?.siteName || ''
@@ -169,7 +158,8 @@ export function createNewsSitemapHandler(targetCollections: string[], seoConfig?
         if (isNaN(t) || t < cutoff) return
         const title = (doc.title as string) || (doc.meta as Record<string, unknown>)?.title as string || ''
         if (!title) return
-        const loc = `${siteUrl}${docPath((doc.slug as string) || '', collection, seoConfig)}`
+        const identity = { collection, slug: (doc.slug as string) || '' }
+        const loc = resolveDocumentUrl(siteModel, identity) ?? resolveDocumentPath(siteModel, identity)
         entries.push(
           `  <url>\n    <loc>${escapeXml(loc)}</loc>\n    <news:news>\n      <news:publication>\n        <news:name>${escapeXml(publication)}</news:name>\n        <news:language>${language}</news:language>\n      </news:publication>\n      <news:publication_date>${new Date(dateStr).toISOString()}</news:publication_date>\n      <news:title>${escapeXml(title)}</news:title>\n    </news:news>\n  </url>`,
         )
@@ -196,14 +186,16 @@ export function createImageSitemapHandler(targetCollections: string[], seoConfig
       const cachedXml = seoCache.get<string>(cacheKey)
       if (typeof cachedXml === 'string') return xmlResponse(cachedXml)
 
-      const siteUrl = resolveSiteUrl(seoConfig)
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const siteUrl = siteModel.origin ?? ''
       const entries: string[] = []
 
       await eachPublishedDoc(req.payload, targetCollections, 1, (doc, collection) => {
         const urls = new Set<string>()
         collectMediaUrls(doc, 'image/', siteUrl, urls)
         if (urls.size === 0) return
-        const loc = `${siteUrl}${docPath((doc.slug as string) || '', collection, seoConfig)}`
+        const identity = { collection, slug: (doc.slug as string) || '' }
+        const loc = resolveDocumentUrl(siteModel, identity) ?? resolveDocumentPath(siteModel, identity)
         const imgs = Array.from(urls)
           .slice(0, 1000) // sitemap image cap per URL
           .map((u) => `    <image:image><image:loc>${escapeXml(u)}</image:loc></image:image>`)
@@ -232,7 +224,8 @@ export function createVideoSitemapHandler(targetCollections: string[], seoConfig
       const cachedXml = seoCache.get<string>(cacheKey)
       if (typeof cachedXml === 'string') return xmlResponse(cachedXml)
 
-      const siteUrl = resolveSiteUrl(seoConfig)
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const siteUrl = siteModel.origin ?? ''
       const entries: string[] = []
 
       await eachPublishedDoc(req.payload, targetCollections, 1, (doc, collection) => {
@@ -252,7 +245,8 @@ export function createVideoSitemapHandler(targetCollections: string[], seoConfig
         collectMediaUrls(meta.image, 'image/', siteUrl, thumbs)
         if (thumbs.size === 0) collectMediaUrls(doc, 'image/', siteUrl, thumbs)
         const thumbnail = Array.from(thumbs)[0] || ''
-        const loc = `${siteUrl}${docPath((doc.slug as string) || '', collection, seoConfig)}`
+        const identity = { collection, slug: (doc.slug as string) || '' }
+        const loc = resolveDocumentUrl(siteModel, identity) ?? resolveDocumentPath(siteModel, identity)
 
         const videos = Array.from(videoUrls)
           .slice(0, 100)

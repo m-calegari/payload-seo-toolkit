@@ -14,6 +14,9 @@
 import type { PayloadHandler } from 'payload'
 import { readAccessOpts } from '../helpers/readAccess.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
+import type { SeoConfig } from '../types.js'
+import { resolveDocumentUrl } from '../core/urls/resolver.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,7 +54,7 @@ function humanize(segment: string): string {
 // Endpoint handler
 // ---------------------------------------------------------------------------
 
-export function createBreadcrumbHandler(targetCollections: string[]): PayloadHandler {
+export function createBreadcrumbHandler(targetCollections: string[], seoConfig?: SeoConfig): PayloadHandler {
   return async (req) => {
     try {
       if (!isSeoPanelUser(req)) {
@@ -107,11 +110,14 @@ export function createBreadcrumbHandler(targetCollections: string[]): PayloadHan
       }
 
       // 3. Determine base URL
-      const siteUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      if (!siteModel.origin) {
+        return Response.json({ error: 'A valid HTTP(S) site origin is required.' }, { status: 500 })
+      }
 
       // 4. Build breadcrumb items from slug path segments
       const segments = slug.split('/').filter(Boolean)
-      const items: BreadcrumbItem[] = [{ name: homeLabel, url: siteUrl }]
+      const items: BreadcrumbItem[] = [{ name: homeLabel, url: siteModel.origin }]
 
       // For each segment, try to find a matching page to get the real title
       for (let i = 0; i < segments.length; i++) {
@@ -119,6 +125,7 @@ export function createBreadcrumbHandler(targetCollections: string[]): PayloadHan
         const isLast = i === segments.length - 1
 
         let name = humanize(segments[i])
+        let resolvedCollection = collection
 
         // Try to find the page by slug in target collections
         for (const collSlug of targetCollections) {
@@ -138,6 +145,7 @@ export function createBreadcrumbHandler(targetCollections: string[]): PayloadHan
               if (typeof docTitle === 'string' && docTitle.trim()) {
                 name = docTitle.trim()
               }
+              resolvedCollection = collSlug
               break
             }
           } catch {
@@ -170,7 +178,10 @@ export function createBreadcrumbHandler(targetCollections: string[]): PayloadHan
 
         items.push({
           name,
-          url: isLast ? `${siteUrl}/${partialSlug}` : `${siteUrl}/${partialSlug}`,
+          url: resolveDocumentUrl(siteModel, {
+            collection: isLast ? collection : resolvedCollection,
+            slug: partialSlug,
+          })!,
         })
       }
 

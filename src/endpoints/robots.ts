@@ -9,12 +9,14 @@ import { parseJsonBody } from '../helpers/parseBody.js'
 import { sanitizeRobotsRules } from '../helpers/robotsSafety.js'
 
 import { isSeoAdminRequest as isAdmin, isSeoPanelUser } from '../helpers/isAdmin.js'
+import type { SeoConfig } from '../types.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 
 /**
  * GET handler — generates robots.txt dynamically from seo-settings.
  * Public endpoint, no authentication required.
  */
-export function createRobotsHandler(targetCollections: string[]): PayloadHandler {
+export function createRobotsHandler(targetCollections: string[], seoConfig?: SeoConfig): PayloadHandler {
   return async (req) => {
     try {
       const settings = await req.payload.find({
@@ -25,7 +27,7 @@ export function createRobotsHandler(targetCollections: string[]): PayloadHandler
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const config = settings.docs[0] as Record<string, any> | undefined
 
-      const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || ''
+      const serverUrl = resolveSiteModel(seoConfig, targetCollections).origin ?? ''
 
       let content = `User-agent: *\n`
       content += `Allow: /\n`

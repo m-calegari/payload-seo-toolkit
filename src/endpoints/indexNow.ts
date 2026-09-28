@@ -11,8 +11,10 @@
  */
 import type { CollectionAfterChangeHook, PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
-import { resolveGscSiteUrl } from '../helpers/gscClient.js'
-import { buildDocUrl, type CollectionRoutes } from '../helpers/docUrl.js'
+import type { CollectionRoutes } from '../helpers/docUrl.js'
+import { createSiteModel } from '../core/urls/siteModel.js'
+import { resolveDocumentUrl } from '../core/urls/resolver.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 
 import { isSeoAdminRequest as isAdmin } from '../helpers/isAdmin.js'
 
@@ -28,7 +30,8 @@ export function docToUrl(
   collection?: string,
   routes?: CollectionRoutes,
 ): string {
-  return buildDocUrl(siteUrl, slug, collection, routes)
+  const model = createSiteModel({ origin: siteUrl, collections: collection ? [collection] : [], collectionRoutes: routes })
+  return resolveDocumentUrl(model, { collection: collection ?? '', slug }) ?? ''
 }
 
 /** Submit URLs to the IndexNow API. Returns ok/status; never throws. */
@@ -87,7 +90,8 @@ export function createIndexNowSubmitHandler(
     try {
       if (!isAdmin(req)) return Response.json({ error: 'Forbidden' }, { status: 403 })
       const key = process.env.SEO_INDEXNOW_KEY
-      const siteUrl = resolveGscSiteUrl(seoConfig)
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const siteUrl = siteModel.origin
       if (!key) return Response.json({ error: 'SEO_INDEXNOW_KEY not configured.' }, { status: 400 })
       if (!siteUrl) return Response.json({ error: 'siteUrl not configured.' }, { status: 400 })
 
@@ -98,7 +102,8 @@ export function createIndexNowSubmitHandler(
           const res = await req.payload.find({ collection, limit: 1000, depth: 0, overrideAccess: true })
           for (const d of res.docs as Array<Record<string, unknown>>) {
             if (d._status === 'draft') continue
-            urls.push(docToUrl((d.slug as string) || '', siteUrl, collection, seoConfig?.collectionRoutes))
+            const url = resolveDocumentUrl(siteModel, { collection, slug: (d.slug as string) || '' })
+            if (url) urls.push(url)
           }
         } catch {
           /* skip */
@@ -125,13 +130,15 @@ export function createIndexNowHook(basePath: string, seoConfig?: SeoConfig): Col
   return ({ doc, req, collection }) => {
     try {
       const key = process.env.SEO_INDEXNOW_KEY
-      const siteUrl = resolveGscSiteUrl(seoConfig)
+      const siteModel = resolveSiteModel(seoConfig, collection?.slug ? [collection.slug] : [])
+      const siteUrl = siteModel.origin
       if (!key || !siteUrl) return doc
       // Only ping for published content.
       const status = (doc as { _status?: string })?._status
       if (status && status !== 'published') return doc
       const slug = ((doc as { slug?: string })?.slug as string) || ''
-      const url = docToUrl(slug, siteUrl, collection?.slug, seoConfig?.collectionRoutes)
+      const url = resolveDocumentUrl(siteModel, { collection: collection?.slug ?? '', slug })
+      if (!url) return doc
       // Fire-and-forget — never block the save on an external ping.
       void submitToIndexNow(siteUrl, key, keyLocationFor(siteUrl, basePath), [url]).then((r) => {
         if (!r.ok && r.reason !== 'no_key_or_urls') {

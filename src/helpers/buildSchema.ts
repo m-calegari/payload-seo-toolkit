@@ -7,7 +7,10 @@
  */
 
 import { extractTextFromLexical } from '../helpers.js'
-import { buildDocUrl, type CollectionRoutes } from './docUrl.js'
+import type { CollectionRoutes } from './docUrl.js'
+import { resolveDocumentPath, resolveDocumentUrl } from '../core/urls/resolver.js'
+import { resolveSiteModel } from './siteModel.js'
+import type { SiteModel } from '../core/urls/siteModel.js'
 
 export const SCHEMA_TYPES = [
   'Article',
@@ -23,15 +26,6 @@ export const SCHEMA_TYPES = [
 ] as const
 
 export type SchemaType = (typeof SCHEMA_TYPES)[number]
-
-function resolveSiteUrl(explicit?: string): string {
-  return (
-    explicit ||
-    process.env.NEXT_PUBLIC_SERVER_URL ||
-    process.env.PAYLOAD_PUBLIC_SERVER_URL ||
-    'http://localhost:3000'
-  ).replace(/\/$/, '')
-}
 
 /** Resolve an absolute image URL from a populated meta.image or hero media object. */
 export function getSchemaImageUrl(
@@ -246,7 +240,11 @@ function buildLocalBusinessSchema(doc: Record<string, unknown>, siteUrl: string,
   return { '@context': 'https://schema.org', ...buildLocationNode(base, doc, siteUrl, docUrl) }
 }
 
-function buildBreadcrumbSchema(doc: Record<string, unknown>, siteUrl: string): Record<string, unknown> {
+function buildBreadcrumbSchema(
+  doc: Record<string, unknown>,
+  siteModel: SiteModel,
+  collection: string,
+): Record<string, unknown> {
   const slug = (doc.slug as string) || ''
   const parts = slug.split('/').filter(Boolean)
 
@@ -255,7 +253,7 @@ function buildBreadcrumbSchema(doc: Record<string, unknown>, siteUrl: string): R
       '@type': 'ListItem',
       position: 1,
       name: 'Accueil',
-      item: siteUrl,
+      item: siteModel.origin ?? '/',
     },
   ]
 
@@ -266,7 +264,8 @@ function buildBreadcrumbSchema(doc: Record<string, unknown>, siteUrl: string): R
       '@type': 'ListItem',
       position: i + 2,
       name: i === parts.length - 1 ? ((doc.title as string) || parts[i]!) : parts[i]!,
-      item: `${siteUrl}${path}`,
+      item: resolveDocumentUrl(siteModel, { collection, slug: path })
+        ?? resolveDocumentPath(siteModel, { collection, slug: path }),
     })
   }
 
@@ -481,11 +480,16 @@ export function buildJsonLd(
   doc: Record<string, unknown>,
   options: BuildJsonLdOptions = {},
 ): { type: SchemaType; jsonLd: Record<string, unknown> } {
-  const siteUrl = resolveSiteUrl(options.siteUrl)
+  const siteModel = resolveSiteModel({
+    siteUrl: options.siteUrl,
+    collectionRoutes: options.collectionRoutes,
+  }, options.collection ? [options.collection] : [])
+  const siteUrl = siteModel.origin ?? ''
   const schemaType = options.type || detectSchemaType(options.collection || '', doc)
   // Resolved once and threaded down: every node that points at "this document"
   // must use the same public URL, prefixed by the collection route.
-  const docUrl = buildDocUrl(siteUrl, (doc.slug as string) || '', options.collection, options.collectionRoutes)
+  const identity = { collection: options.collection ?? '', slug: (doc.slug as string) || '' }
+  const docUrl = resolveDocumentUrl(siteModel, identity) ?? resolveDocumentPath(siteModel, identity)
 
   let jsonLd: Record<string, unknown>
   switch (schemaType) {
@@ -496,7 +500,7 @@ export function buildJsonLd(
       jsonLd = buildLocalBusinessSchema(doc, siteUrl, docUrl)
       break
     case 'BreadcrumbList':
-      jsonLd = buildBreadcrumbSchema(doc, siteUrl)
+      jsonLd = buildBreadcrumbSchema(doc, siteModel, options.collection ?? '')
       break
     case 'FAQPage':
       jsonLd = buildFAQSchema(doc)

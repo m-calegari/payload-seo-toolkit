@@ -221,7 +221,7 @@ export function registerEndpoints(
     {
       path: `${basePath}/breadcrumb`,
       method: 'get',
-      handler: createBreadcrumbHandler(targetCollections),
+      handler: createBreadcrumbHandler(targetCollections, seoConfig),
     },
   )
   
@@ -265,7 +265,7 @@ export function registerEndpoints(
     pluginEndpoints.push({
       path: `${basePath}/external-links`,
       method: 'post',
-      handler: withRateLimit(createExternalLinksHandler(targetCollections, targetGlobals)),
+      handler: withRateLimit(createExternalLinksHandler(targetCollections, targetGlobals, seoConfig)),
     })
   }
   
@@ -335,7 +335,7 @@ export function registerEndpoints(
     pluginEndpoints.push({
       path: `${basePath}/link-graph`,
       method: 'get',
-      handler: withRateLimit(createLinkGraphHandler(targetCollections, targetGlobals)),
+      handler: withRateLimit(createLinkGraphHandler(targetCollections, targetGlobals, seoConfig)),
     })
   }
   
@@ -378,7 +378,7 @@ export function registerEndpoints(
     {
       path: `${basePath}/robots.txt`,
       method: 'get' as const,
-      handler: createRobotsHandler(targetCollections),
+      handler: createRobotsHandler(targetCollections, seoConfig),
     },
     {
       path: `${basePath}/robots.txt`,

@@ -77,8 +77,24 @@ export { buildSeoInputFromDoc } from './endpoints/validate.js'
 export { buildSeoMetadata } from './helpers/buildMetadata.js'
 // Public URL construction — exported so a host can build the same URLs the
 // sitemap, the canonical and the JSON-LD use.
-export { buildDocPath, buildDocUrl, DEFAULT_COLLECTION_ROUTES } from './helpers/docUrl.js'
+export { buildDocPath, buildDocUrl, DEFAULT_COLLECTION_ROUTES, getCollectionRoute } from './helpers/docUrl.js'
 export type { CollectionRoutes } from './helpers/docUrl.js'
+export {
+  createSiteModel,
+  matchDocumentIdentityFromPath,
+  normalizeSiteOrigin,
+  resolveCanonicalUrl,
+  resolveDocumentPath,
+  resolveDocumentUrl,
+} from './core/urls/index.js'
+export type {
+  CanonicalUrlInput,
+  CreateSiteModelOptions,
+  DocumentUrlIdentity,
+  SiteCollectionModel,
+  SiteLocaleModel,
+  SiteModel,
+} from './core/urls/index.js'
 export type { SeoMetadata, SeoMetadataOptions } from './helpers/buildMetadata.js'
 export {
   buildJsonLd,

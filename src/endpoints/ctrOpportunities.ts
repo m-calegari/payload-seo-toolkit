@@ -20,6 +20,8 @@ import {
   isGscAdminRequest,
   type GscRow,
 } from '../helpers/gscClient.js'
+import { matchDocumentIdentityFromPath } from '../core/urls/resolver.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 
 /**
  * Approximate blended organic CTR by average SERP position (industry curves, desktop+mobile).
@@ -101,6 +103,7 @@ async function resolveDoc(
   payload: Payload,
   url: string,
   targetCollections: string[],
+  seoConfig?: SeoConfig,
 ): Promise<{ collection: string; id: string } | null> {
   let path: string
   try {
@@ -108,23 +111,25 @@ async function resolveDoc(
   } catch {
     return null
   }
-  const segments = path.split('/').filter(Boolean)
-  const slug = segments.length === 0 ? 'home' : segments[segments.length - 1]!
-  for (const collection of targetCollections) {
-    try {
-      const res = await payload.find({
-        collection,
-        where: { slug: { equals: slug } },
-        limit: 1,
-        depth: 0,
-        overrideAccess: true,
-      })
-      if (res.docs.length > 0) {
-        return { collection, id: String(res.docs[0]!.id) }
-      }
-    } catch {
-      // collection without a slug field — skip
+  const identity = matchDocumentIdentityFromPath(
+    resolveSiteModel(seoConfig, targetCollections),
+    path,
+    targetCollections,
+  )
+  if (!identity) return null
+  try {
+    const res = await payload.find({
+      collection: identity.collection,
+      where: { slug: { equals: identity.slug } },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (res.docs.length > 0) {
+      return { collection: identity.collection, id: String(res.docs[0]!.id) }
     }
+  } catch {
+    // collection without a slug field — skip
   }
   return null
 }
@@ -181,7 +186,7 @@ export function createCtrOpportunitiesHandler(
       // Resolve the top opportunities to Payload docs so the UI can optimize in one click.
       const top = opportunities.slice(0, 50)
       const resolved = await Promise.all(
-        top.map(async (o) => ({ ...o, doc: await resolveDoc(req.payload, o.url, targetCollections) })),
+        top.map(async (o) => ({ ...o, doc: await resolveDoc(req.payload, o.url, targetCollections, seoConfig) })),
       )
 
       return Response.json(

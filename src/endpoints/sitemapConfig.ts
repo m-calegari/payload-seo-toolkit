@@ -10,7 +10,8 @@
 
 import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
-import { buildDocPath } from '../helpers/docUrl.js'
+import { resolveDocumentPath } from '../core/urls/resolver.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
 
@@ -113,6 +114,7 @@ export function createSitemapConfigHandler(
       // 2. Fetch all pages + posts
       const excludedSet = new Set(excludedSlugs)
       const preview: SitemapPreviewEntry[] = []
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
       let totalPages = 0
       let excludedCount = 0
 
@@ -160,7 +162,7 @@ export function createSitemapConfigHandler(
           // exactly what the generated sitemap will publish, collection route
           // prefix included. `|| '/'` keeps the home page displayable, where the
           // XML emits the bare site URL.
-          url: buildDocPath(slug, collectionSlug, seoConfig?.collectionRoutes) || '/',
+          url: resolveDocumentPath(siteModel, { collection: collectionSlug, slug }),
           collection: collectionSlug,
           title,
           changefreq: pageChangefreq,

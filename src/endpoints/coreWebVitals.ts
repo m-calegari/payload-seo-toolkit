@@ -18,6 +18,7 @@ import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
 import { seoCache } from '../cache.js'
 import { isSeoAdminRequest, isSeoPanelUser } from '../helpers/isAdmin.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 
 // Google's official Core Web Vitals thresholds (good / needs-improvement boundaries).
 const CWV_THRESHOLDS = {
@@ -33,15 +34,6 @@ function rate(value: number | null, t: { good: number; poor: number }): Rating {
   if (value <= t.good) return 'good'
   if (value <= t.poor) return 'needs-improvement'
   return 'poor'
-}
-
-function resolveSiteUrl(seoConfig?: SeoConfig): string | undefined {
-  return (
-    seoConfig?.siteUrl ||
-    process.env.NEXT_PUBLIC_SERVER_URL ||
-    process.env.PAYLOAD_PUBLIC_SERVER_URL ||
-    undefined
-  )?.replace(/\/$/, '')
 }
 
 export function createCoreWebVitalsHandler(seoConfig?: SeoConfig): PayloadHandler {
@@ -60,7 +52,7 @@ export function createCoreWebVitalsHandler(seoConfig?: SeoConfig): PayloadHandle
       }
 
       // SSRF protection — only allow the configured site's own origin.
-      const siteUrl = resolveSiteUrl(seoConfig)
+      const siteUrl = resolveSiteModel(seoConfig).origin ?? undefined
       if (!siteUrl) {
         return Response.json(
           { error: 'siteUrl is not configured — set it in the plugin config or NEXT_PUBLIC_SERVER_URL.' },

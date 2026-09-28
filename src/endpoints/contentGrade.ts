@@ -27,6 +27,8 @@
  */
 import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
+import { createSiteModel, type CollectionRoutes } from '../core/urls/siteModel.js'
+import { resolveDocumentPath } from '../core/urls/resolver.js'
 import {
   getGscOAuthConfig,
   getOrCreateGscAuthDoc,
@@ -242,7 +244,7 @@ function lastPathSegments(page: string): string[] {
  */
 export function matchPageRows(
   rows: GscRow[],
-  opts: { slug?: string; explicitUrl?: string },
+  opts: { slug?: string; explicitUrl?: string; collection?: string; collectionRoutes?: CollectionRoutes },
 ): { matchedUrl: string | null; queryRows: GscQueryRow[] } {
   const byPage = new Map<string, GscRow[]>()
   for (const r of rows) {
@@ -260,6 +262,22 @@ export function matchPageRows(
   if (opts.explicitUrl) {
     const target = stripTrailing(opts.explicitUrl)
     candidates = [...byPage.keys()].filter((p) => stripTrailing(p) === target)
+  } else if (opts.collection) {
+    const model = createSiteModel({
+      collections: [opts.collection],
+      collectionRoutes: opts.collectionRoutes,
+    })
+    const expectedPath = stripTrailing(resolveDocumentPath(model, {
+      collection: opts.collection,
+      slug: opts.slug,
+    }))
+    candidates = [...byPage.keys()].filter((page) => {
+      try {
+        return stripTrailing(new URL(page).pathname) === expectedPath
+      } catch {
+        return stripTrailing(page.split(/[?#]/, 1)[0]) === expectedPath
+      }
+    })
   } else {
     const wantSlug = normSlug(opts.slug || 'home')
     const isHome = wantSlug === 'home' || wantSlug === 'index' || wantSlug === ''
@@ -611,7 +629,12 @@ export function createContentGradeHandler(
         )
       }
 
-      const { matchedUrl, queryRows } = matchPageRows(rows, { slug, explicitUrl })
+      const { matchedUrl, queryRows } = matchPageRows(rows, {
+        slug,
+        explicitUrl,
+        collection,
+        collectionRoutes: seoConfig?.collectionRoutes,
+      })
       const grade = gradeContentCoverage(extracted.text, queryRows, { locale: analysisLocale })
 
       return Response.json(

@@ -12,7 +12,8 @@
  */
 
 import type { PayloadHandler } from 'payload'
-import { buildDocPath } from '../helpers/docUrl.js'
+import { resolveDocumentUrl } from '../core/urls/resolver.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 import type { SeoConfig } from '../types.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
 import { isPublicSeoDocument } from '../helpers/publicSeoDocument.js'
@@ -102,12 +103,8 @@ export function createLlmsTxtHandler(
     }
 
     try {
-      const siteUrl = (
-        seoConfig?.siteUrl ||
-        process.env.NEXT_PUBLIC_SERVER_URL ||
-        process.env.PAYLOAD_PUBLIC_SERVER_URL ||
-        ''
-      ).replace(/\/$/, '')
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const siteUrl = siteModel.origin ?? ''
       const siteName = resolveSiteName(seoConfig, siteUrl)
       const siteDescription = (seoConfig as { siteDescription?: string } | undefined)?.siteDescription
 
@@ -127,13 +124,14 @@ export function createLlmsTxtHandler(
         if (!isPublicSeoDocument(d)) continue
         const slug: string = (d.slug as string) || ''
         if (!slug) continue
-        const path = buildDocPath(slug, sourceSlug, seoConfig?.collectionRoutes)
+        const documentUrl = resolveDocumentUrl(siteModel, { collection: sourceSlug, slug })
+        if (!documentUrl) continue
         const title: string = (d.title as string) || (d?.meta?.title as string) || slug
         const description: string | undefined =
           (typeof d?.meta?.description === 'string' && d.meta.description) || undefined
         const heading = sourceSlug.charAt(0).toUpperCase() + sourceSlug.slice(1)
         if (!bySection.has(heading)) bySection.set(heading, [])
-        bySection.get(heading)!.push({ title, url: `${siteUrl}${path}`, description })
+        bySection.get(heading)!.push({ title, url: documentUrl, description })
       }
 
       const sections: LlmsTxtSection[] = Array.from(bySection.entries()).map(([heading, pages]) => ({

@@ -15,7 +15,9 @@
  */
 
 import { getSchemaImageUrl } from './buildSchema.js'
-import { buildDocUrl, type CollectionRoutes } from './docUrl.js'
+import type { CollectionRoutes } from './docUrl.js'
+import { resolveCanonicalUrl } from '../core/urls/resolver.js'
+import { resolveSiteModel } from './siteModel.js'
 
 export interface SeoMetadataOptions {
   /** Collection slug — used to pick the Open Graph type (posts → 'article') */
@@ -59,15 +61,6 @@ export interface SeoMetadata {
     description?: string
     images?: string[]
   }
-}
-
-function resolveSiteUrl(explicit?: string): string {
-  return (
-    explicit ||
-    process.env.NEXT_PUBLIC_SERVER_URL ||
-    process.env.PAYLOAD_PUBLIC_SERVER_URL ||
-    ''
-  ).replace(/\/$/, '')
 }
 
 function parseRobots(
@@ -117,7 +110,12 @@ export function buildSeoMetadata(
   doc: Record<string, unknown>,
   options: SeoMetadataOptions = {},
 ): SeoMetadata {
-  const siteUrl = resolveSiteUrl(options.siteUrl)
+  const siteModel = resolveSiteModel({
+    siteUrl: options.siteUrl,
+    collectionRoutes: options.collectionRoutes,
+    locale: options.locale === 'fr' || options.locale === 'en' ? options.locale : undefined,
+  }, options.collection ? [options.collection] : [])
+  const siteUrl = siteModel.origin ?? ''
   const meta = (doc.meta || {}) as Record<string, unknown>
 
   const rawTitle = (meta.title as string) || (doc.title as string) || ''
@@ -133,9 +131,10 @@ export function buildSeoMetadata(
     (typeof meta.canonicalUrl === 'string' && meta.canonicalUrl) ||
     (typeof doc.canonicalUrl === 'string' && doc.canonicalUrl) ||
     ''
-  const canonical =
-    explicitCanonical ||
-    (siteUrl ? buildDocUrl(siteUrl, slug, options.collection, options.collectionRoutes) : undefined)
+  const canonical = resolveCanonicalUrl(siteModel, {
+    identity: { collection: options.collection ?? '', slug, locale: options.locale },
+    explicitCanonical,
+  }) ?? undefined
 
   const languages = buildLanguages(doc)
   const isPost = options.collection === 'posts' || doc.isPost === true

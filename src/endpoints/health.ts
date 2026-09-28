@@ -10,6 +10,7 @@
  */
 import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 import { seoCache } from '../cache.js'
 import { getGscOAuthConfig, getOrCreateGscAuthDoc } from '../helpers/gscClient.js'
 import { aiModel } from '../helpers/aiModel.js'
@@ -31,7 +32,7 @@ export function createSeoHealthHandler(basePath: string, seoConfig?: SeoConfig):
         alertWebhook: !!process.env.SEO_ALERT_WEBHOOK_URL,
         alertEmail: !!process.env.SEO_ALERT_EMAIL,
         indexNowKey: !!process.env.SEO_INDEXNOW_KEY,
-        siteUrl: seoConfig?.siteUrl || process.env.NEXT_PUBLIC_SERVER_URL || null,
+        siteUrl: resolveSiteModel(seoConfig).origin,
       }
 
       // --- Runtime cache state ---

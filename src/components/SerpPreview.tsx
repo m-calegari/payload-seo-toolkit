@@ -3,6 +3,9 @@
 import React, { useState } from 'react'
 import { useDashboardT } from '../hooks/useSeoLocale.js'
 import { withSeoErrorBoundary } from './withSeoErrorBoundary.js'
+import { createSiteModel } from '../core/urls/siteModel.js'
+import { resolveDocumentPath, resolveDocumentUrl } from '../core/urls/resolver.js'
+import type { CollectionRoutes } from '../core/urls/siteModel.js'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -13,6 +16,8 @@ export interface SerpPreviewProps {
   slug?: string
   hostname?: string
   favicon?: string
+  collection?: string
+  collectionRoutes?: CollectionRoutes
 }
 
 // ---------------------------------------------------------------------------
@@ -67,14 +72,6 @@ function buildBreadcrumb(hostname: string, slug?: string): string {
   return `${base} > ${breadcrumb}`
 }
 
-function buildFullUrl(hostname: string, slug?: string): string {
-  const base = hostname.replace(/\/$/, '')
-  const prefix = base.startsWith('http') ? base : `https://${base}`
-  if (!slug || slug === '/' || slug === '') return prefix
-  const cleanSlug = slug.replace(/^\//, '')
-  return `${prefix}/${cleanSlug}`
-}
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -89,6 +86,8 @@ function SerpPreviewInner({
   slug,
   hostname,
   favicon,
+  collection,
+  collectionRoutes,
 }: SerpPreviewProps) {
   const t = useDashboardT()
   const [open, setOpen] = useState(false)
@@ -97,8 +96,14 @@ function SerpPreviewInner({
   const title = metaTitle || ''
   const desc = metaDescription || ''
   const host = hostname || 'example.com'
-  const fullUrl = buildFullUrl(host, slug)
-  const breadcrumb = buildBreadcrumb(host, slug)
+  const previewModel = createSiteModel({
+    origin: /^https?:\/\//i.test(host) ? host : `https://${host}`,
+    collections: collection ? [collection] : [],
+    collectionRoutes,
+  })
+  const identity = { collection: collection ?? '', slug }
+  const fullUrl = resolveDocumentUrl(previewModel, identity) ?? host
+  const breadcrumb = buildBreadcrumb(host, resolveDocumentPath(previewModel, identity))
 
   const isDesktop = device === 'desktop'
 

@@ -6,7 +6,8 @@
 
 import type { PayloadHandler } from 'payload'
 import type { SeoConfig } from '../types.js'
-import { buildDocPath } from '../helpers/docUrl.js'
+import { resolveDocumentPath, resolveDocumentUrl } from '../core/urls/resolver.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
 import { seoCache } from '../cache.js'
 import { isPublicSeoDocument } from '../helpers/publicSeoDocument.js'
@@ -90,7 +91,7 @@ export function createSitemapHandler(
       const cachedXml = seoCache.get<string>(cacheKey)
       if (typeof cachedXml === 'string') return xmlResponse(cachedXml)
 
-      const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || ''
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
 
       // Read sitemap config from seo-settings
       const settingsResult = await req.payload.find({
@@ -137,7 +138,8 @@ export function createSitemapHandler(
         // Prefix by the collection route (posts → /posts/<slug> by default):
         // emitting the bare slug for a `posts` document declares a 404 to
         // Googlebot and wastes crawl budget.
-        const path = buildDocPath(slug, collectionSlug, seoConfig?.collectionRoutes)
+        const identity = { collection: collectionSlug, slug }
+        const documentUrl = resolveDocumentUrl(siteModel, identity) ?? resolveDocumentPath(siteModel, identity)
 
         // Determine priority and changefreq
         let priority = defaultPriority
@@ -167,7 +169,7 @@ export function createSitemapHandler(
         }
 
         urls.push({
-          loc: `${serverUrl}${path}`,
+          loc: documentUrl,
           lastmod: doc.updatedAt
             ? new Date(doc.updatedAt).toISOString().split('T')[0]
             : undefined,

@@ -14,6 +14,8 @@ import { hardenedRequest } from '../helpers/ssrfGuard.js'
 import { seoCache } from '../cache.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
+import type { SeoConfig } from '../types.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 import { isSeoAdminRequest, isSeoPanelUser } from '../helpers/isAdmin.js'
 import { safeCacheLocale } from '../helpers/safeCacheLocale.js'
 
@@ -218,7 +220,11 @@ async function checkUrl(url: string): Promise<CachedResult> {
 // Endpoint handler
 // ---------------------------------------------------------------------------
 
-export function createExternalLinksHandler(collections: string[], globals: string[] = []): PayloadHandler {
+export function createExternalLinksHandler(
+  collections: string[],
+  globals: string[] = [],
+  seoConfig?: SeoConfig,
+): PayloadHandler {
   return async (req) => {
     try {
       if (!isSeoPanelUser(req)) {
@@ -248,7 +254,7 @@ export function createExternalLinksHandler(collections: string[], globals: strin
       }
 
       // Detect site URL for filtering own-domain links
-      const siteUrl = process.env.NEXT_PUBLIC_SERVER_URL || ''
+      const siteUrl = resolveSiteModel(seoConfig, collections).origin ?? ''
 
       // 1. Collect all external links across all documents
       const urlSources = new Map<string, Array<{ title: string; slug: string; collection: string }>>()

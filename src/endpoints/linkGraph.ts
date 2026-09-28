@@ -14,6 +14,9 @@ import { extractAllInternalLinks, normalizeToSlug, resolveToDocSlug } from '../h
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
 import { isSeoAdminRequest, isSeoPanelUser } from '../helpers/isAdmin.js'
 import { safeCacheLocale } from '../helpers/safeCacheLocale.js'
+import type { SeoConfig } from '../types.js'
+import { resolveDocumentPath } from '../core/urls/resolver.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -287,7 +290,11 @@ export function computeUnderLinked(
 // Endpoint handler factory
 // ---------------------------------------------------------------------------
 
-export function createLinkGraphHandler(targetCollections: string[], globals: string[] = []): PayloadHandler {
+export function createLinkGraphHandler(
+  targetCollections: string[],
+  globals: string[] = [],
+  seoConfig?: SeoConfig,
+): PayloadHandler {
   return async (req) => {
     try {
       if (!isSeoPanelUser(req)) {
@@ -323,6 +330,7 @@ export function createLinkGraphHandler(targetCollections: string[], globals: str
         globals,
         depth: 1,
       })
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
 
       let processed = 0
       for (const { doc, sourceType, sourceSlug } of allFetched) {
@@ -336,14 +344,18 @@ export function createLinkGraphHandler(targetCollections: string[], globals: str
         const d = doc as any
 
         const isGlobal = sourceType === 'global'
-        const nodeId = isGlobal ? `global:${sourceSlug}` : ((d.slug as string) || '')
+        const documentSlug = (d.slug as string) || ''
+        const resolvedPath = isGlobal
+          ? `global:${sourceSlug}`
+          : resolveDocumentPath(siteModel, { collection: sourceSlug, slug: documentSlug })
+        const nodeId = resolvedPath === '/' ? 'home' : resolvedPath.replace(/^\//, '')
         const title = (d.title as string) || (isGlobal ? sourceSlug : '')
         const collectionLabel = isGlobal ? `global:${sourceSlug}` : sourceSlug
 
         slugMap.set(nodeId, {
           id: isGlobal ? sourceSlug : d.id,
           title,
-          slug: nodeId,
+          slug: isGlobal ? nodeId : documentSlug,
           collection: collectionLabel,
         })
 
@@ -365,9 +377,10 @@ export function createLinkGraphHandler(targetCollections: string[], globals: str
       // valid edges and their targets are not mis-flagged as orphans. Route prefixes =
       // target collection slugs + global route segments.
       const knownSlugs = new Set(slugMap.keys())
-      const routePrefixes = new Set(
-        [...targetCollections, ...globals].map((s) => s.toLowerCase().replace(/^\/+|\/+$/g, '')),
-      )
+      const routePrefixes = new Set([
+        ...Object.values(siteModel.collections).map((entry) => entry.route).filter(Boolean),
+        ...globals,
+      ])
       for (const links of outgoingMap.values()) {
         for (const link of links) {
           link.slug = resolveToDocSlug(link.slug, knownSlugs, routePrefixes)
@@ -408,10 +421,10 @@ export function createLinkGraphHandler(targetCollections: string[], globals: str
           docId: docInfo.id,
           title: docInfo.title,
           collection: docInfo.collection,
-          slug,
+          slug: docInfo.slug,
           inDegree,
           outDegree,
-          isOrphan: !homeSlugs.has(slug) && inDegree === 0,
+          isOrphan: !homeSlugs.has(docInfo.slug) && inDegree === 0,
           isHub: outDegree > HUB_THRESHOLD,
         })
 

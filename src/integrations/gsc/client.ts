@@ -10,6 +10,7 @@ import type { Payload } from 'payload'
 import type { SeoConfig } from '../../types.js'
 import { decryptToken } from '../../helpers/tokenCrypto.js'
 import { isSeoAdmin, isSeoAdminRequest } from '../../helpers/isAdmin.js'
+import { resolveSiteModel } from '../../helpers/siteModel.js'
 
 export const GSC_AUTH_COLLECTION = 'seo-gsc-auth'
 export const GSC_SCOPES = 'https://www.googleapis.com/auth/webmasters.readonly openid email'
@@ -23,12 +24,7 @@ export const isGscAdmin = isSeoAdmin
 export const isGscAdminRequest = isSeoAdminRequest
 
 export function resolveGscSiteUrl(seoConfig?: SeoConfig): string | undefined {
-  return (
-    seoConfig?.siteUrl ||
-    process.env.NEXT_PUBLIC_SERVER_URL ||
-    process.env.PAYLOAD_PUBLIC_SERVER_URL ||
-    undefined
-  )?.replace(/\/$/, '')
+  return resolveSiteModel(seoConfig).origin ?? undefined
 }
 
 export interface GscOAuthConfig {
