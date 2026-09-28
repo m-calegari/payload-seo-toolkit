@@ -1,2 +1,7 @@
 export { analyzeSeo } from './analyzeSeo.js'
+export { analyzeSeoHealth, SEO_HEALTH_CATEGORIES } from './analyzeSeoHealth.js'
+export { LEGACY_RULE_REGISTRY, buildAnalyzerContext } from './analyzeSeo.js'
+export { TECHNICAL_HEALTH_RULES } from './healthRegistry.js'
+export { validateAnalyzerSettings } from './config.js'
 export type { SeoAnalysis, SeoConfig, SeoInput } from '../../types.js'
+export type { AnalyzerContext, AnalyzeSeoHealthOptions, SeoCategoryHealth, SeoFinding, SeoFindingSeverity, SeoHealthCategory, SeoHealthResult, SeoRule } from './healthTypes.js'

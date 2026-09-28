@@ -18,6 +18,7 @@ import { invalidateTechnicalSeoCaches } from '../payload/technicalSeo/cache.js'
 import { sanitizeRobotsRules } from '../helpers/robotsSafety.js'
 import type { SeoConfig } from '../types.js'
 import { buildTechnicalSeoAdminContract } from '../payload/technicalSeo/adminContract.js'
+import { validateAnalyzerSettings } from '../core/analyzer/config.js'
 
 export function createSettingsHandler(targetCollections: string[] = [], seoConfig?: SeoConfig): PayloadHandler {
   return async (req) => {
@@ -56,6 +57,7 @@ export function createSettingsHandler(targetCollections: string[] = [], seoConfi
         const errors = [
           ...validateTechnicalSeoSettings(technicalSeoSettingsInput(body), targetCollections),
           ...validateRobotsPolicyInput(body.robots),
+          ...validateAnalyzerSettings({ disabledRules: body.disabledRules, thresholds: body.thresholds }),
         ]
         if (errors.length) return Response.json({ error: 'Invalid technical SEO settings', details: errors }, { status: 400 })
 

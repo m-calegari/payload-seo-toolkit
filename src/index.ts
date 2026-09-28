@@ -192,3 +192,6 @@ export {
 } from './constants'
 
 export { analyzeSeo } from './core/analyzer/analyzeSeo.js'
+export { analyzeSeoHealth, SEO_HEALTH_CATEGORIES } from './core/analyzer/analyzeSeoHealth.js'
+export { validateAnalyzerSettings } from './core/analyzer/config.js'
+export type { AnalyzerContext, AnalyzeSeoHealthOptions, SeoCategoryHealth, SeoFinding, SeoFindingSeverity, SeoHealthCategory, SeoHealthResult, SeoRule } from './core/analyzer/healthTypes.js'

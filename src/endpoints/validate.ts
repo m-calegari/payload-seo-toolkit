@@ -9,11 +9,17 @@
 
 import type { PayloadHandler } from 'payload'
 import { readAccessOpts } from '../helpers/readAccess.js'
-import { analyzeSeo } from '../core/analyzer/index.js'
+import { analyzeSeoHealth } from '../core/analyzer/index.js'
 import { loadMergedConfig } from '../helpers/loadMergedConfig.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
 import type { SeoInput, SeoConfig } from '../types.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
+import { loadTechnicalSeoPolicy } from '../payload/technicalSeo/settings.js'
+import { resolveSiteModel } from '../helpers/siteModel.js'
+import { resolveDocumentUrl } from '../core/urls/index.js'
+import { resolveTechnicalSeo } from '../core/technicalSeo/index.js'
+import { isPubliclyReadableDocument } from '../helpers/publicSeoDocument.js'
+import { publicSeoReadAccess } from '../payload/security/publicSeoAccess.js'
 
 /**
  * Build a SeoInput object from a Payload document (page or post).
@@ -146,6 +152,29 @@ export function createValidateHandler(
         localeMapping,
       })
 
+      const analyzeDocument = async (doc: Record<string, unknown>, collection: string, id?: string | number) => {
+        const seoInput = buildSeoInputFromDoc(doc, collection)
+        if (!_collections.includes(collection)) return analyzeSeoHealth(seoInput, { config: mergedConfig })
+        let publicEligible = false
+        if (id !== undefined) {
+          try {
+            const publicDoc = await req.payload.findByID({ collection, id, depth: 0, ...publicSeoReadAccess }) as Record<string, unknown>
+            publicEligible = isPubliclyReadableDocument(publicDoc)
+          } catch {
+            publicEligible = false
+          }
+        }
+        const siteModel = resolveSiteModel(seoConfig, _collections)
+        const { policy } = await loadTechnicalSeoPolicy(req.payload, _collections)
+        const identity = { collection, slug: seoInput.slug ?? '' }
+        const effectiveTechnicalSeo = resolveTechnicalSeo({ siteModel, policy, identity, document: doc, publicEligible })
+        return analyzeSeoHealth(seoInput, {
+          config: mergedConfig, effectiveTechnicalSeo, publicEligible, identity,
+          computedCanonicalUrl: resolveDocumentUrl(siteModel, identity),
+          actualSchemaType: typeof doc.schemaType === 'string' ? doc.schemaType : undefined,
+        })
+      }
+
       // GET — quick score check by ID
       if (req.method === 'GET') {
         const url = new URL(req.url as string)
@@ -175,7 +204,8 @@ export function createValidateHandler(
             ...readAccessOpts(req),
           })
           const seoInput = buildSeoInputFromDoc(doc, `global:${globalSlug}`, { isGlobal: true })
-          const analysis = analyzeSeo(seoInput, mergedConfig)
+          const health = analyzeSeoHealth(seoInput, { config: mergedConfig })
+          const analysis = health.legacy
           return Response.json({
             global: globalSlug,
             score: analysis.score,
@@ -184,6 +214,7 @@ export function createValidateHandler(
             warningChecks: analysis.checks.filter((c) => c.status === 'warning').map((c) => ({ id: c.id, label: c.label, message: c.message })),
             passedChecks: analysis.checks.filter((c) => c.status === 'pass').length,
             totalChecks: analysis.checks.length,
+            health,
           })
         }
 
@@ -194,8 +225,9 @@ export function createValidateHandler(
           ...readAccessOpts(req),
         })
 
+        const health = await analyzeDocument(doc as Record<string, unknown>, collection, id)
         const seoInput = buildSeoInputFromDoc(doc, collection)
-        const analysis = analyzeSeo(seoInput, mergedConfig)
+        const analysis = health.legacy
 
         return Response.json({
           id,
@@ -211,6 +243,7 @@ export function createValidateHandler(
             .map((c) => ({ id: c.id, label: c.label, message: c.message })),
           passedChecks: analysis.checks.filter((c) => c.status === 'pass').length,
           totalChecks: analysis.checks.length,
+          health,
         })
       }
 
@@ -225,6 +258,7 @@ export function createValidateHandler(
       }
 
       let seoInput: SeoInput
+      let analyzedDoc: Record<string, unknown> | undefined
 
       if (data) {
         seoInput = { ...data, ...(overrides || {}) }
@@ -251,6 +285,7 @@ export function createValidateHandler(
           depth: 1,
           ...readAccessOpts(req),
         })
+        analyzedDoc = doc as Record<string, unknown>
         seoInput = buildSeoInputFromDoc(doc, collection)
         if (overrides) seoInput = { ...seoInput, ...overrides }
       } else {
@@ -260,12 +295,16 @@ export function createValidateHandler(
         )
       }
 
-      const analysis = analyzeSeo(seoInput, mergedConfig)
+      const health = analyzedDoc && collection && id
+        ? await analyzeDocument(analyzedDoc, collection, id)
+        : analyzeSeoHealth(seoInput, { config: mergedConfig })
+      const analysis = health.legacy
 
       return Response.json({
         score: analysis.score,
         level: analysis.level,
         checks: analysis.checks,
+        health,
         input: {
           metaTitle: seoInput.metaTitle,
           metaDescription: seoInput.metaDescription,

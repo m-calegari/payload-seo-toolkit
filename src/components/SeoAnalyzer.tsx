@@ -2,13 +2,15 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAllFormFields } from '@payloadcms/ui'
-import { analyzeSeo } from '../core/analyzer/index.js'
+import { analyzeSeoHealth } from '../core/analyzer/index.js'
 import { extractTextFromLexical } from '../helpers.js'
 import type { SeoAnalysis, SeoCheck, CheckCategory, RuleGroup } from '../types.js'
+import type { SeoHealthResult } from '../core/analyzer/healthTypes.js'
 import { SeoSocialPreview } from './SeoSocialPreview.js'
 import { useDashboardT, useSeoAnalysisLocale, type SeoAnalysisLocaleOptions } from '../hooks/useSeoLocale.js'
 import { type DashboardTranslations } from '../dashboard-i18n.js'
 import { withSeoErrorBoundary } from './withSeoErrorBoundary.js'
+import { SeoHealthPanel } from './SeoHealthPanel.js'
 
 // ---------------------------------------------------------------------------
 // Color palette (neubrutalist — matches custom.scss)
@@ -744,8 +746,8 @@ const SeoAnalyzerInner: React.FC<SeoAnalyzerFieldProps> = ({ field }) => {
   }, [formFields, getFieldValue])
 
   // Extract values from form state and run analysis
-  const { analysis, wordCount } = useMemo(() => {
-    if (!formFields) return { analysis: { score: 0, level: 'poor' as const, checks: [] }, wordCount: 0 }
+  const { analysis, health, wordCount } = useMemo<{ analysis: SeoAnalysis; health: SeoHealthResult | null; wordCount: number }>(() => {
+    if (!formFields) return { analysis: { score: 0, level: 'poor', checks: [] }, health: null, wordCount: 0 }
 
     const metaTitle = getFieldValue('meta.title') as string | undefined
     const metaDescription = getFieldValue('meta.description') as string | undefined
@@ -917,7 +919,7 @@ const SeoAnalyzerInner: React.FC<SeoAnalyzerFieldProps> = ({ field }) => {
       if (blockIdx > 100) break // safety
     }
 
-    const result = analyzeSeo(
+    const healthResult = analyzeSeoHealth(
       {
         metaTitle,
         metaDescription,
@@ -936,8 +938,9 @@ const SeoAnalyzerInner: React.FC<SeoAnalyzerFieldProps> = ({ field }) => {
         updatedAt: updatedAt || undefined,
         contentLastReviewed: contentLastReviewed || undefined,
       },
-      { locale: analysisLocale },
+      { config: { locale: analysisLocale } },
     )
+    const result = healthResult.legacy
 
     // Compute word count from the content check (reuse the check message or compute separately)
     let wc = 0
@@ -947,7 +950,7 @@ const SeoAnalyzerInner: React.FC<SeoAnalyzerFieldProps> = ({ field }) => {
       if (match) wc = parseInt(match[1], 10)
     }
 
-    return { analysis: result, wordCount: wc }
+    return { analysis: result, health: healthResult, wordCount: wc }
   }, [formFields, focusKeyword, focusKeywords, isCornerstone, updatedAt, contentLastReviewed, getFieldValue, analysisLocale])
 
   // Social preview data — extracted from form state
@@ -1110,6 +1113,9 @@ const SeoAnalyzerInner: React.FC<SeoAnalyzerFieldProps> = ({ field }) => {
 
   return (
     <div style={styles.wrapper}>
+      {health && <SeoHealthPanel health={health} />}
+      <details>
+        <summary style={{ cursor: 'pointer', fontWeight: 700, marginBottom: 12 }}>Legacy analysis details and editing tools</summary>
       {/* Header with score ring */}
       <div
         style={{
@@ -2061,6 +2067,7 @@ const SeoAnalyzerInner: React.FC<SeoAnalyzerFieldProps> = ({ field }) => {
       {bonusChecks.length > 0 && (
         <CategorySection category="bonus" checks={bonusChecks} defaultOpen={false} t={t} />
       )}
+      </details>
     </div>
   )
 }

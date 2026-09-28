@@ -57,11 +57,38 @@ import { checkHreflang } from '../../rules/hreflang'
 
 import { extractPayloadLink } from '../../helpers/linkExtractor.js'
 
+export const LEGACY_RULE_REGISTRY: ReadonlyArray<{
+  group: RuleGroup
+  fn: (input: SeoInput, context: AnalysisContext) => SeoCheck[]
+  applies: (input: SeoInput) => boolean
+}> = [
+  { group: 'title', fn: checkTitle, applies: () => true },
+  { group: 'meta-description', fn: checkMetaDescription, applies: () => true },
+  { group: 'url', fn: checkUrl, applies: (input) => !input.isGlobal },
+  { group: 'headings', fn: checkHeadings, applies: () => true },
+  { group: 'content', fn: checkContent, applies: () => true },
+  { group: 'images', fn: checkImages, applies: () => true },
+  { group: 'linking', fn: checkLinking, applies: () => true },
+  { group: 'social', fn: checkSocial, applies: () => true },
+  { group: 'schema', fn: checkSchema, applies: () => true },
+  { group: 'readability', fn: checkReadability, applies: () => true },
+  { group: 'quality', fn: checkQuality, applies: () => true },
+  { group: 'secondary-keywords', fn: checkSecondaryKeywords, applies: (input) => !!input.focusKeywords?.length },
+  { group: 'cornerstone', fn: checkCornerstone, applies: (input) => input.isCornerstone === true },
+  { group: 'freshness', fn: checkFreshness, applies: () => true },
+  { group: 'technical', fn: checkTechnical, applies: () => true },
+  { group: 'accessibility', fn: checkAccessibility, applies: () => true },
+  { group: 'eeat', fn: checkEeat, applies: () => true },
+  { group: 'geo', fn: checkGeo, applies: () => true },
+  { group: 'hreflang', fn: checkHreflang, applies: (input) => !!input.localeAlternates?.length },
+  { group: 'ecommerce', fn: checkEcommerce, applies: (input) => input.isProduct === true },
+]
+
 // ---------------------------------------------------------------------------
 // Context builder — pre-computes data shared across rule modules
 // ---------------------------------------------------------------------------
 
-function buildContext(data: SeoInput, config: SeoConfig): AnalysisContext {
+export function buildAnalyzerContext(data: SeoInput, config: SeoConfig): AnalysisContext {
   const {
     heroRichText,
     blocks,
@@ -329,45 +356,41 @@ export function analyzeSeo(data: SeoInput, config?: SeoConfig): SeoAnalysis {
     ...config,
   }
 
-  const ctx = buildContext(data, mergedConfig)
+  const ctx = buildAnalyzerContext(data, mergedConfig)
+  return analyzeSeoWithContext(data, mergedConfig, ctx)
+}
+
+/** Execute legacy rules against already-extracted content. Used by the health adapter. */
+export function analyzeSeoWithContext(data: SeoInput, mergedConfig: SeoConfig, ctx: AnalysisContext): SeoAnalysis {
 
   const disabled = new Set<RuleGroup>(mergedConfig.disabledRules || [])
-
-  // Map rule groups to their check functions
-  const ruleModules: Array<{ group: RuleGroup; fn: (i: SeoInput, c: AnalysisContext) => SeoCheck[] }> = [
-    { group: 'title', fn: checkTitle },
-    { group: 'meta-description', fn: checkMetaDescription },
-    { group: 'url', fn: checkUrl },
-    { group: 'headings', fn: checkHeadings },
-    { group: 'content', fn: checkContent },
-    { group: 'images', fn: checkImages },
-    { group: 'linking', fn: checkLinking },
-    { group: 'social', fn: checkSocial },
-    { group: 'schema', fn: checkSchema },
-    { group: 'readability', fn: checkReadability },
-    { group: 'quality', fn: checkQuality },
-    { group: 'secondary-keywords', fn: checkSecondaryKeywords },
-    { group: 'cornerstone', fn: checkCornerstone },
-    { group: 'freshness', fn: checkFreshness },
-    { group: 'technical', fn: checkTechnical },
-    { group: 'accessibility', fn: checkAccessibility },
-    { group: 'eeat', fn: checkEeat },
-    { group: 'geo', fn: checkGeo },
-    { group: 'hreflang', fn: checkHreflang },
-    // E-commerce rules only run for product pages
-    ...(data.isProduct ? [{ group: 'ecommerce' as RuleGroup, fn: checkEcommerce }] : []),
-  ]
 
   // Run all rule modules (skip disabled groups)
   const checks: SeoCheck[] = []
   const weightOverrides = mergedConfig.overrideWeights
 
-  for (const { group, fn } of ruleModules) {
+  for (const { group, fn, applies } of LEGACY_RULE_REGISTRY) {
     if (disabled.has(group)) continue
-    const moduleChecks = fn(data, ctx)
+    if (!applies(data)) continue
+    let moduleChecks: SeoCheck[]
+    try {
+      moduleChecks = fn(data, ctx)
+    } catch {
+      // A broken independent rule group is observable but cannot crash every other
+      // diagnostic. Weight zero preserves legacy scoring while health reports it.
+      moduleChecks = [{
+        id: `engine-${group}-failure`,
+        label: 'Check unavailable',
+        status: 'warning',
+        message: 'This check group could not be evaluated.',
+        category: 'important',
+        weight: 0,
+        group,
+      }]
+    }
 
     // Apply weight overrides if configured
-    if (weightOverrides && weightOverrides[group] !== undefined) {
+    if (weightOverrides && weightOverrides[group] !== undefined && Number.isFinite(weightOverrides[group]) && weightOverrides[group]! >= 0) {
       const overrideWeight = weightOverrides[group]!
       for (const check of moduleChecks) {
         check.weight = overrideWeight
