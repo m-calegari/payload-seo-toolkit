@@ -42,6 +42,16 @@ export function registerAdmin(
         Component: '@consilioweb/payload-seo-analyzer/views#SeoConfigView',
         path: '/seo-config',
       }
+      for (const path of ['seo-overview', 'seo-search-appearance', 'seo-sitemap', 'seo-robots', 'seo-structured-data']) {
+        views[path] = {
+          Component: '@consilioweb/payload-seo-analyzer/views#SeoConfigView',
+          path: `/${path}`,
+        }
+      }
+      views['seo-legacy-config'] = {
+        Component: '@consilioweb/payload-seo-analyzer/views#LegacySeoConfigView',
+        path: '/seo-legacy-config',
+      }
     }
   
     if (features.redirects) {

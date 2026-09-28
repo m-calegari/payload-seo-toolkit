@@ -12,12 +12,14 @@ import type { PayloadHandler } from 'payload'
 import { parseJsonBody } from '../helpers/parseBody.js'
 
 import { isSeoAdminRequest as isAdmin, isSeoPanelUser } from '../helpers/isAdmin.js'
-import { validateTechnicalSeoSettings } from '../core/technicalSeo/index.js'
+import { validateRobotsPolicyInput, validateTechnicalSeoSettings } from '../core/technicalSeo/index.js'
 import { invalidateTechnicalSeoPolicyCache, technicalSeoSettingsInput } from '../payload/technicalSeo/settings.js'
 import { invalidateTechnicalSeoCaches } from '../payload/technicalSeo/cache.js'
 import { sanitizeRobotsRules } from '../helpers/robotsSafety.js'
+import type { SeoConfig } from '../types.js'
+import { buildTechnicalSeoAdminContract } from '../payload/technicalSeo/adminContract.js'
 
-export function createSettingsHandler(targetCollections: string[] = []): PayloadHandler {
+export function createSettingsHandler(targetCollections: string[] = [], seoConfig?: SeoConfig): PayloadHandler {
   return async (req) => {
     try {
       if (!isSeoPanelUser(req)) {
@@ -32,7 +34,7 @@ export function createSettingsHandler(targetCollections: string[] = []): Payload
           overrideAccess: true,
         })
         const settings = result.docs[0] || {}
-        return Response.json({ settings })
+        return Response.json({ settings, effective: buildTechnicalSeoAdminContract(settings as Record<string, unknown>, targetCollections, seoConfig) })
       }
 
       // PATCH — update settings (admin only)
@@ -51,7 +53,10 @@ export function createSettingsHandler(targetCollections: string[] = []): Payload
           }
         }
         if (body.robotsCustomRules !== undefined) body.robotsCustomRules = sanitizeRobotsRules(body.robotsCustomRules)
-        const errors = validateTechnicalSeoSettings(technicalSeoSettingsInput(body), targetCollections)
+        const errors = [
+          ...validateTechnicalSeoSettings(technicalSeoSettingsInput(body), targetCollections),
+          ...validateRobotsPolicyInput(body.robots),
+        ]
         if (errors.length) return Response.json({ error: 'Invalid technical SEO settings', details: errors }, { status: 400 })
 
         // Find existing or create
@@ -80,7 +85,11 @@ export function createSettingsHandler(targetCollections: string[] = []): Payload
         invalidateTechnicalSeoCaches()
         invalidateTechnicalSeoPolicyCache(req.payload)
 
-        return Response.json({ settings, success: true })
+        return Response.json({
+          settings,
+          effective: buildTechnicalSeoAdminContract(settings as Record<string, unknown>, targetCollections, seoConfig),
+          success: true,
+        })
       }
 
       return Response.json({ error: 'Method not allowed' }, { status: 405 })

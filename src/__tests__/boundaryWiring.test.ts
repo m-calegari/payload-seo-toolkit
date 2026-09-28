@@ -51,13 +51,13 @@ describe('error boundary — the components Payload mounts from the import map',
   })
 })
 
-describe('error boundary — the nine admin views', () => {
+describe('error boundary — all admin views', () => {
   const views = fs
     .readdirSync(path.join(SRC, 'views'))
     .filter((f) => f.endsWith('View.tsx'))
 
-  it('there are nine of them', () => {
-    expect(views).toHaveLength(9)
+  it('includes the ten registered view wrappers', () => {
+    expect(views).toHaveLength(10)
   })
 
   it.each(views)('%s wraps its client body', (file) => {

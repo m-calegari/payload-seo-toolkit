@@ -14,6 +14,9 @@ import { resolveDocumentPath } from '../core/urls/resolver.js'
 import { resolveSiteModel } from '../helpers/siteModel.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
+import { loadTechnicalSeoPolicy } from '../payload/technicalSeo/settings.js'
+import { resolveTechnicalSeo } from '../core/technicalSeo/index.js'
+import { isPubliclyReadableDocument } from '../helpers/publicSeoDocument.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,23 +38,6 @@ interface SitemapPreviewEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Simple glob matching: supports trailing * (startsWith)
-// ---------------------------------------------------------------------------
-
-function matchPattern(slug: string, pattern: string): boolean {
-  // Exact match
-  if (pattern === slug) return true
-
-  // Wildcard at end: "blog/*" matches "blog/article-1"
-  if (pattern.endsWith('*')) {
-    const prefix = pattern.slice(0, -1)
-    return slug.startsWith(prefix)
-  }
-
-  return false
-}
-
-// ---------------------------------------------------------------------------
 // Endpoint handler
 // ---------------------------------------------------------------------------
 
@@ -65,54 +51,7 @@ export function createSitemapConfigHandler(
         return Response.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
-      // 1. Fetch settings
-      let excludedSlugs: string[] = []
-      let defaultChangefreq = 'weekly'
-      let defaultPriority = 0.5
-      let priorityOverrides: PriorityOverride[] = []
-
-      try {
-        const settingsResult = await req.payload.find({
-          collection: 'seo-settings',
-          limit: 1,
-          overrideAccess: true,
-        })
-        const settings = settingsResult.docs?.[0]
-        if (settings) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const sitemap = (settings as any).sitemap
-          if (sitemap && typeof sitemap === 'object') {
-            if (Array.isArray(sitemap.excludedSlugs)) {
-              excludedSlugs = sitemap.excludedSlugs
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                .map((s: any) => (typeof s === 'string' ? s : s?.slug || ''))
-                .filter(Boolean)
-            }
-            if (typeof sitemap.defaultChangefreq === 'string') {
-              defaultChangefreq = sitemap.defaultChangefreq
-            }
-            if (typeof sitemap.defaultPriority === 'number') {
-              defaultPriority = sitemap.defaultPriority
-            }
-            if (Array.isArray(sitemap.priorityOverrides)) {
-              priorityOverrides = sitemap.priorityOverrides
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                .filter((o: any) => o && typeof o.slugPattern === 'string')
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                .map((o: any) => ({
-                  slugPattern: o.slugPattern,
-                  priority: typeof o.priority === 'number' ? o.priority : defaultPriority,
-                  ...(o.changefreq && { changefreq: o.changefreq }),
-                }))
-            }
-          }
-        }
-      } catch {
-        // SeoSettings might not exist yet — use defaults
-      }
-
-      // 2. Fetch all pages + posts
-      const excludedSet = new Set(excludedSlugs)
+      const { policy } = await loadTechnicalSeoPolicy(req.payload, targetCollections)
       const preview: SitemapPreviewEntry[] = []
       const siteModel = resolveSiteModel(seoConfig, targetCollections)
       let totalPages = 0
@@ -121,6 +60,8 @@ export function createSitemapConfigHandler(
       const allFetched = await fetchAllDocs(req.payload, {
         collections: targetCollections,
         depth: 0,
+        maxDocs: 1000,
+        access: 'public',
       })
 
       for (const { doc, sourceSlug: collectionSlug } of allFetched) {
@@ -131,42 +72,25 @@ export function createSitemapConfigHandler(
 
         totalPages++
 
-        // Check exclusion
-        if (excludedSet.has(slug)) {
+        const identity = { collection: collectionSlug, slug }
+        const effective = resolveTechnicalSeo({
+          siteModel, policy, identity, document: d,
+          publicEligible: isPubliclyReadableDocument(d),
+        })
+        if (!effective.sitemap.include) {
           excludedCount++
           continue
         }
-
-        // Compute priority and changefreq for this page
-        let pageChangefreq = defaultChangefreq
-        let pagePriority = defaultPriority
-
-        // Apply overrides (last match wins)
-        for (const override of priorityOverrides) {
-          if (matchPattern(slug, override.slugPattern)) {
-            pagePriority = override.priority
-            if (override.changefreq) {
-              pageChangefreq = override.changefreq
-            }
-          }
-        }
-
-        // Homepage gets highest priority if no override set
-        if ((slug === 'home' || slug === '') && !priorityOverrides.some((o) => matchPattern(slug, o.slugPattern))) {
-          pagePriority = 1.0
-          pageChangefreq = 'daily'
-        }
-
-        preview.push({
+        if (preview.length < 50) preview.push({
           // Same path builder as sitemap.xml (sitemap.ts): the preview must show
           // exactly what the generated sitemap will publish, collection route
           // prefix included. `|| '/'` keeps the home page displayable, where the
           // XML emits the bare site URL.
-          url: resolveDocumentPath(siteModel, { collection: collectionSlug, slug }),
+          url: resolveDocumentPath(siteModel, identity),
           collection: collectionSlug,
           title,
-          changefreq: pageChangefreq,
-          priority: pagePriority,
+          changefreq: effective.sitemap.changeFrequency,
+          priority: effective.sitemap.priority,
           lastmod: d.updatedAt || '',
         })
       }
@@ -179,16 +103,21 @@ export function createSitemapConfigHandler(
 
       return Response.json({
         config: {
-          excludedSlugs,
-          defaultChangefreq,
-          defaultPriority,
-          priorityOverrides,
+          excludedSlugs: policy.excludedSlugs,
+          defaultChangefreq: policy.defaults.sitemap.changeFrequency,
+          defaultPriority: policy.defaults.sitemap.priority,
+          priorityOverrides: policy.sitemapOverrides.map((entry) => ({
+            slugPattern: entry.slugPattern,
+            priority: entry.priority ?? policy.defaults.sitemap.priority,
+            ...(entry.changeFrequency ? { changefreq: entry.changeFrequency } : {}),
+          })),
         },
         preview,
         stats: {
           totalPages,
           excludedCount,
           includedCount: totalPages - excludedCount,
+          previewLimit: 50,
         },
       })
     } catch (error) {

@@ -29,6 +29,24 @@ function paths(value: unknown, fallback: string[]): string[] {
   })
 }
 
+export function validateRobotsPolicyInput(input: unknown): string[] {
+  if (input === undefined) return []
+  if (!input || typeof input !== 'object') return ['robots must be an object']
+  const record = input as Record<string, unknown>
+  const errors: string[] = []
+  if (record.userAgent !== undefined && (typeof record.userAgent !== 'string' || !/^[A-Za-z0-9*._-]+$/.test(record.userAgent.trim()))) {
+    errors.push('Robots user-agent contains unsupported characters.')
+  }
+  for (const key of ['allow', 'disallow'] as const) {
+    if (record[key] !== undefined && !Array.isArray(record[key])) errors.push(`robots.${key} must be an array`)
+    for (const entry of Array.isArray(record[key]) ? record[key] : []) {
+      const raw = typeof entry === 'string' ? entry : String((entry as { path?: unknown })?.path ?? '')
+      if (!raw.trim().startsWith('/') || /[\r\n\0]/.test(raw)) errors.push(`Robots paths must begin with / and contain no control characters: ${raw}`)
+    }
+  }
+  return errors
+}
+
 export function normalizeRobotsPolicy(input?: {
   userAgent?: unknown
   allow?: unknown

@@ -227,9 +227,9 @@ export function createSeoSettingsCollection(targetCollections: readonly string[]
         type: 'group',
         label: 'Robots policy',
         fields: [
-          { name: 'userAgent', type: 'text', defaultValue: '*' },
-          { name: 'allow', type: 'array', fields: [{ name: 'path', type: 'text', required: true }] },
-          { name: 'disallow', type: 'array', fields: [{ name: 'path', type: 'text', required: true }] },
+          { name: 'userAgent', type: 'text', defaultValue: '*', validate: (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9*._-]+$/.test(value.trim()) ? true : 'Unsupported user-agent value' },
+          { name: 'allow', type: 'array', fields: [{ name: 'path', type: 'text', required: true, validate: (value: unknown) => typeof value === 'string' && value.startsWith('/') && !/[\r\n\0]/.test(value) ? true : 'Path must begin with /' }] },
+          { name: 'disallow', type: 'array', fields: [{ name: 'path', type: 'text', required: true, validate: (value: unknown) => typeof value === 'string' && value.startsWith('/') && !/[\r\n\0]/.test(value) ? true : 'Path must begin with /' }] },
           { name: 'advertiseSitemap', type: 'checkbox', defaultValue: true },
         ],
       },

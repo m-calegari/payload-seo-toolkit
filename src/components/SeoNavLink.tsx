@@ -5,6 +5,8 @@
 import React from 'react'
 // @ts-ignore — next is a peer dependency
 import { usePathname } from 'next/navigation'
+// @ts-ignore — next is a peer dependency
+import Link from 'next/link'
 import { useDashboardT } from '../hooks/useSeoLocale.js'
 import { withSeoErrorBoundary } from './withSeoErrorBoundary.js'
 
@@ -35,6 +37,31 @@ function SeoNavLinkInner() {
   const adminPrefix = pathname?.match(/^(\/[^/]+)\//)?.[1] || '/admin'
 
   const items: NavItem[] = [
+    {
+      href: `${adminPrefix}/seo-overview`,
+      label: 'Overview',
+      icon: <svg {...svgProps}><circle cx="12" cy="12" r="9" /><path d="M8 12h8M12 8v8" /></svg>,
+    },
+    {
+      href: `${adminPrefix}/seo-search-appearance`,
+      label: 'Search Appearance',
+      icon: <svg {...svgProps}><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>,
+    },
+    {
+      href: `${adminPrefix}/seo-sitemap`,
+      label: 'Sitemap',
+      icon: <svg {...svgProps}><path d="M4 4h6v6H4zM14 14h6v6h-6zM4 14h6v6H4zM10 7h4v10" /></svg>,
+    },
+    {
+      href: `${adminPrefix}/seo-robots`,
+      label: 'Robots',
+      icon: <svg {...svgProps}><rect x="4" y="7" width="16" height="13" rx="2" /><path d="M9 3h6M12 3v4M8 12h.01M16 12h.01" /></svg>,
+    },
+    {
+      href: `${adminPrefix}/seo-structured-data`,
+      label: 'Structured Data',
+      icon: <svg {...svgProps}><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /><path d="m9 8-3 4 3 4M15 8l3 4-3 4" /></svg>,
+    },
     {
       href: `${adminPrefix}/seo`,
       label: t.nav.dashboard,
@@ -152,7 +179,7 @@ function SeoNavLinkInner() {
       {items.map((item) => {
         const isActive = pathname === item.href
         return (
-          <a
+          <Link
             key={item.href}
             href={item.href}
             style={{
@@ -173,7 +200,7 @@ function SeoNavLinkInner() {
           >
             {item.icon}
             {item.label}
-          </a>
+          </Link>
         )
       })}
     </div>

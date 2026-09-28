@@ -146,7 +146,7 @@ export function validateTechnicalSeoSettings(
       errors.push(`Unknown SEO collection: ${String(row.collection ?? '')}`)
     }
     if (row.sitemapPriority !== undefined && !validPriority(row.sitemapPriority)) {
-      errors.push(`Invalid sitemap priority for ${String(row.collection ?? '')}`)
+      errors.push(`Sitemap priority for ${String(row.collection ?? '')} must be between 0 and 1.`)
     }
     if (row.sitemapChangeFrequency !== undefined && !validFrequency(row.sitemapChangeFrequency)) {
       errors.push(`Invalid sitemap change frequency for ${String(row.collection ?? '')}`)
