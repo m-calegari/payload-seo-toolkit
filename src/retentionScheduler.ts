@@ -18,6 +18,7 @@ const PURGE_INTERVAL = 24 * 60 * 60 * 1000 // 24 hours
 const STARTUP_DELAY = 5 * 60 * 1000 // 5 minutes after init
 
 let intervalId: ReturnType<typeof setInterval> | null = null
+let startupId: ReturnType<typeof setTimeout> | null = null
 let listenersAttached = false
 
 async function runPurge(payload: Payload, retention: RetentionConfig): Promise<void> {
@@ -49,7 +50,8 @@ export function startRetentionPurge(payload: Payload, retention: RetentionConfig
   const targets = resolveRetention(retention)
   if (targets.length === 0) return
 
-  setTimeout(() => {
+  startupId = setTimeout(() => {
+    startupId = null
     void runPurge(payload, retention as RetentionConfig)
   }, STARTUP_DELAY)
 
@@ -72,6 +74,10 @@ export function startRetentionPurge(payload: Payload, retention: RetentionConfig
 }
 
 export function stopRetentionPurge(): void {
+  if (startupId) {
+    clearTimeout(startupId)
+    startupId = null
+  }
   if (intervalId) {
     clearInterval(intervalId)
     intervalId = null

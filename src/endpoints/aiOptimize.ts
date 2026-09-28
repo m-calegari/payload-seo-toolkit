@@ -40,7 +40,7 @@ import type { SeoConfig } from '../types.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
 import { DEFAULT_AI_MODEL } from '../helpers/aiModel.js'
 import { readAccessOpts } from '../helpers/readAccess.js'
-import { requestAnthropicMessage } from '../integrations/ai/anthropic.js'
+import { createAnthropicProvider } from '../integrations/ai/anthropic.js'
 
 // Server-side rule bounds — match the SEO engine's expectations so applied values are compliant.
 const TITLE_HARD_MAX = 70
@@ -102,7 +102,7 @@ ${params.content.substring(0, 3000)}
 
 Return the optimized JSON now:`
 
-  const data = await requestAnthropicMessage(apiKey, {
+  const data = await createAnthropicProvider(apiKey).requestMessage({
     model,
     max_tokens: 1024,
     system: systemPrompt,

@@ -59,19 +59,18 @@ describe('seoAnalyzerPlugin — integration (config transform)', () => {
     expect(users.fields.length).toBe(0)
   })
 
-  it('registers default-on feature collections (history, redirects, settings)', () => {
+  it('registers only the core settings collection by default', () => {
     const out = run({ collections: ['pages', 'posts'] })
     const s = slugs(out)
-    expect(s).toContain('seo-score-history')
-    expect(s).toContain('seo-redirects')
     expect(s).toContain('seo-settings')
-    // gscApi off by default → no GSC collections
+    expect(s).not.toContain('seo-score-history')
+    expect(s).not.toContain('seo-redirects')
     expect(s).not.toContain('seo-gsc-auth')
     expect(s).not.toContain('seo-rank-history')
   })
 
-  it('registers AI endpoints when aiFeatures is on (default)', () => {
-    const p = paths(run({ collections: ['pages', 'posts'] }))
+  it('registers AI endpoints only when the integration is enabled', () => {
+    const p = paths(run({ collections: ['pages', 'posts'], integrations: { ai: true } }))
     expect(p).toContain('/seo-plugin/ai-optimize')
     expect(p).toContain('/seo-plugin/ai-optimize-bulk')
     expect(p).toContain('/seo-plugin/ai-content-brief')
@@ -106,8 +105,8 @@ describe('seoAnalyzerPlugin — integration (config transform)', () => {
     expect(Array.isArray(after) ? after.length : 0).toBeGreaterThan(0)
   })
 
-  it('wires a beforeChange redirect hook on target collections by default', () => {
-    const out = run({ collections: ['pages', 'posts'] })
+  it('wires a beforeChange redirect hook only when redirects are enabled', () => {
+    const out = run({ collections: ['pages', 'posts'], modules: { redirects: true } })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pages = out.collections.find((c: any) => c.slug === 'pages')
     const before = pages.hooks?.beforeChange || []
@@ -120,8 +119,8 @@ describe('seoAnalyzerPlugin — integration (config transform)', () => {
     expect(p).toContain('/seo/health')
   })
 
-  it('sets an onInit function (composes with existing)', () => {
-    const out = run({ collections: ['pages', 'posts'] })
+  it('sets an onInit function only for an enabled background service', () => {
+    const out = run({ collections: ['pages', 'posts'], backgroundServices: { warmCache: true } })
     expect(typeof out.onInit).toBe('function')
   })
 

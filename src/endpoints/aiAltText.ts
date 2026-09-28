@@ -17,7 +17,7 @@ import type { SeoConfig } from '../types.js'
 import { resolveGscSiteUrl } from '../helpers/gscClient.js'
 import { parseJsonBody } from '../helpers/parseBody.js'
 import { aiModel } from '../helpers/aiModel.js'
-import { requestAnthropicMessage } from '../integrations/ai/anthropic.js'
+import { createAnthropicProvider } from '../integrations/ai/anthropic.js'
 import { hardenedRequest } from '../helpers/ssrfGuard.js'
 
 const ALT_MAX = 125
@@ -81,7 +81,7 @@ Rules:
 
   const userText = `Filename: ${context.filename}${context.title ? `\nPage/context: ${context.title}` : ''}\nWrite the alt text for this image:`
 
-  const data = await requestAnthropicMessage(apiKey, {
+  const data = await createAnthropicProvider(apiKey).requestMessage({
     model,
     max_tokens: 150,
     system: systemPrompt,

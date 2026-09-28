@@ -3,12 +3,14 @@ import type { SeoFeatures } from '../types.js'
 import { seoTranslations } from '../translations.js'
 import { registerDashboardTranslations } from '../dashboard-i18n.js'
 import type { SeoPluginConfig } from './types.js'
+import type { SeoCapabilityRegistry } from './capabilities.js'
 
 /** Register admin views, navigation, translations, and client-visible feature config. */
 export function registerAdmin(
   config: Config,
   pluginConfig: SeoPluginConfig,
   features: Required<SeoFeatures>,
+  capabilities?: SeoCapabilityRegistry,
 ): void {
   // 3. Add admin views + nav link (conditionally based on features)
   // At least one view-based feature must be enabled to inject admin components
@@ -136,6 +138,7 @@ export function registerAdmin(
     seoAnalyzer: {
       ...((adminCustom.seoAnalyzer as Record<string, unknown> | undefined) ?? {}),
       features,
+      capabilities: capabilities?.publicStatus() ?? [],
       ...(pluginConfig.customTranslations && { customTranslations: pluginConfig.customTranslations }),
     },
   }

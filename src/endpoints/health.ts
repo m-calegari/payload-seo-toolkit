@@ -16,22 +16,25 @@ import { getGscOAuthConfig, getOrCreateGscAuthDoc } from '../helpers/gscClient.j
 import { aiModel } from '../helpers/aiModel.js'
 
 import { isSeoAdminRequest as isAdmin } from '../helpers/isAdmin.js'
+import type { SeoCapabilityStatus } from '../plugin/capabilities.js'
 
-export function createSeoHealthHandler(basePath: string, seoConfig?: SeoConfig): PayloadHandler {
+export function createSeoHealthHandler(basePath: string, seoConfig?: SeoConfig, capabilities?: readonly SeoCapabilityStatus[]): PayloadHandler {
   return async (req) => {
     try {
       if (!isAdmin(req)) return Response.json({ error: 'Forbidden' }, { status: 403 })
 
       // --- Env configuration (booleans only, never the values) ---
+      // Direct handler consumers predate the capability registry; preserve that public API.
+      const enabled = (id: string) => capabilities === undefined || capabilities.some((capability) => capability.id === id && capability.enabled)
       const config = {
-        aiKey: !!process.env.ANTHROPIC_API_KEY,
-        aiModel: aiModel(),
-        pageSpeedKey: !!(process.env.PAGESPEED_API_KEY || process.env.GOOGLE_PAGESPEED_API_KEY),
-        gscConfigured: !!getGscOAuthConfig(basePath, seoConfig),
-        gscEncryptionKey: !!process.env.SEO_GSC_ENCRYPTION_KEY,
-        alertWebhook: !!process.env.SEO_ALERT_WEBHOOK_URL,
-        alertEmail: !!process.env.SEO_ALERT_EMAIL,
-        indexNowKey: !!process.env.SEO_INDEXNOW_KEY,
+        aiKey: enabled('ai') && !!process.env.ANTHROPIC_API_KEY,
+        aiModel: enabled('ai') ? aiModel() : null,
+        pageSpeedKey: enabled('pageSpeed') && !!(process.env.PAGESPEED_API_KEY || process.env.GOOGLE_PAGESPEED_API_KEY),
+        gscConfigured: enabled('googleSearchConsole') && !!getGscOAuthConfig(basePath, seoConfig),
+        gscEncryptionKey: enabled('googleSearchConsole') && !!process.env.SEO_GSC_ENCRYPTION_KEY,
+        alertWebhook: enabled('alerts') && !!process.env.SEO_ALERT_WEBHOOK_URL,
+        alertEmail: enabled('alerts') && !!process.env.SEO_ALERT_EMAIL,
+        indexNowKey: enabled('indexNow') && !!process.env.SEO_INDEXNOW_KEY,
         siteUrl: resolveSiteModel(seoConfig).origin,
       }
 
@@ -43,14 +46,14 @@ export function createSeoHealthHandler(basePath: string, seoConfig?: SeoConfig):
       let gscConnected = false
       let gscEmail: string | null = null
       let lastRankSnapshot: string | null = null
-      try {
+      if (enabled('googleSearchConsole')) try {
         const authDoc = await getOrCreateGscAuthDoc(req.payload)
         gscConnected = !!authDoc.refreshTokenEnc
         gscEmail = (authDoc.connectedEmail as string) || null
       } catch {
         /* collection absent */
       }
-      try {
+      if (enabled('rankTracking')) try {
         const latest = await req.payload.find({
           collection: 'seo-rank-history',
           sort: '-snapshotDate',
@@ -65,10 +68,10 @@ export function createSeoHealthHandler(basePath: string, seoConfig?: SeoConfig):
 
       // --- Derived warnings (what to fix) ---
       const warnings: string[] = []
-      if (!config.aiKey) warnings.push('ANTHROPIC_API_KEY not set — AI features fall back to heuristics.')
+      if (enabled('ai') && !config.aiKey) warnings.push('AI integration enabled but its provider credential is not configured.')
       if (config.gscConfigured && !gscConnected) warnings.push('GSC configured but not connected — rank tracking & CTR opportunities inactive.')
       if (config.gscConfigured && !config.gscEncryptionKey) warnings.push('SEO_GSC_ENCRYPTION_KEY not set — GSC token encrypted with a derived key (set an explicit key for stability).')
-      if ((config.alertWebhook || config.alertEmail) === false) warnings.push('No alert channel configured (SEO_ALERT_WEBHOOK_URL / SEO_ALERT_EMAIL) — monitoring digest will not be delivered.')
+      if (enabled('alerts') && !config.alertWebhook && !config.alertEmail) warnings.push('Alerts are enabled but no delivery channel is configured.')
 
       return Response.json(
         {
@@ -82,6 +85,7 @@ export function createSeoHealthHandler(basePath: string, seoConfig?: SeoConfig):
             lastRankSnapshot,
           },
           warnings,
+          capabilities: capabilities ?? [],
         },
         { headers: { 'Cache-Control': 'no-store' } },
       )

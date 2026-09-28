@@ -18,7 +18,7 @@ import { extractDocContent } from '../helpers/extractDocContent.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
 import { aiModel } from '../helpers/aiModel.js'
 import { readAccessOpts } from '../helpers/readAccess.js'
-import { requestAnthropicMessage } from '../integrations/ai/anthropic.js'
+import { createAnthropicProvider } from '../integrations/ai/anthropic.js'
 
 export interface ContentBrief {
   outline: Array<{ level: 'h2' | 'h3'; text: string }>
@@ -109,7 +109,7 @@ ${params.existingContent ? `Existing content (first 2000 chars, complement it â€
 
 Return the JSON brief now:`
 
-  const data = await requestAnthropicMessage(apiKey, {
+  const data = await createAnthropicProvider(apiKey).requestMessage({
     model,
     max_tokens: 1500,
     system: systemPrompt,

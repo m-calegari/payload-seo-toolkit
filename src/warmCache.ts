@@ -14,6 +14,7 @@ const WARM_UP_INTERVAL = 60 * 60 * 1000 // 1 hour
 const STARTUP_DELAY = 10 * 1000 // 10 seconds after init
 
 let intervalId: ReturnType<typeof setInterval> | null = null
+let startupId: ReturnType<typeof setTimeout> | null = null
 let listenersAttached = false
 
 /**
@@ -81,7 +82,8 @@ export function startCacheWarmUp(payload: Payload, _basePath: string, globals: s
   stopCacheWarmUp()
 
   // Initial warm-up after a short delay (let server finish initializing)
-  setTimeout(() => {
+  startupId = setTimeout(() => {
+    startupId = null
     void doWarmUp(payload, collections, globals)
   }, STARTUP_DELAY)
 
@@ -107,6 +109,10 @@ export function startCacheWarmUp(payload: Payload, _basePath: string, globals: s
  * Stop the periodic warm-up (for cleanup).
  */
 export function stopCacheWarmUp(): void {
+  if (startupId) {
+    clearTimeout(startupId)
+    startupId = null
+  }
   if (intervalId) {
     clearInterval(intervalId)
     intervalId = null

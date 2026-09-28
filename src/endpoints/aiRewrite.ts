@@ -20,7 +20,7 @@ import {
   generateMetaDescription as heuristicDescription,
 } from '../helpers/metaGeneration.js'
 import { isSeoPanelUser } from '../helpers/isAdmin.js'
-import { requestAnthropicMessage } from '../integrations/ai/anthropic.js'
+import { createAnthropicProvider } from '../integrations/ai/anthropic.js'
 
 // ---------------------------------------------------------------------------
 // Claude API call
@@ -51,7 +51,7 @@ Page content (first 2000 chars): ${pageContent.substring(0, 2000)}
 
 Generate the optimized ${fieldLabel}:`
 
-  const data = await requestAnthropicMessage(apiKey, {
+  const data = await createAnthropicProvider(apiKey).requestMessage({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 200,
     messages: [{ role: 'user', content: userPrompt }],

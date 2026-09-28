@@ -19,8 +19,9 @@ import { sanitizeRobotsRules } from '../helpers/robotsSafety.js'
 import type { SeoConfig } from '../types.js'
 import { buildTechnicalSeoAdminContract } from '../payload/technicalSeo/adminContract.js'
 import { validateAnalyzerSettings } from '../core/analyzer/config.js'
+import type { SeoCapabilityStatus } from '../plugin/capabilities.js'
 
-export function createSettingsHandler(targetCollections: string[] = [], seoConfig?: SeoConfig): PayloadHandler {
+export function createSettingsHandler(targetCollections: string[] = [], seoConfig?: SeoConfig, capabilities: readonly SeoCapabilityStatus[] = []): PayloadHandler {
   return async (req) => {
     try {
       if (!isSeoPanelUser(req)) {
@@ -35,7 +36,7 @@ export function createSettingsHandler(targetCollections: string[] = [], seoConfi
           overrideAccess: true,
         })
         const settings = result.docs[0] || {}
-        return Response.json({ settings, effective: buildTechnicalSeoAdminContract(settings as Record<string, unknown>, targetCollections, seoConfig) })
+        return Response.json({ settings, effective: buildTechnicalSeoAdminContract(settings as Record<string, unknown>, targetCollections, seoConfig), capabilities })
       }
 
       // PATCH — update settings (admin only)
@@ -90,6 +91,7 @@ export function createSettingsHandler(targetCollections: string[] = [], seoConfi
         return Response.json({
           settings,
           effective: buildTechnicalSeoAdminContract(settings as Record<string, unknown>, targetCollections, seoConfig),
+          capabilities,
           success: true,
         })
       }

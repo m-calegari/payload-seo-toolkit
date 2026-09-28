@@ -12,6 +12,7 @@ import { buildAlertDigest, deliverAlertDigest, getAlertConfig } from './endpoint
 const STARTUP_DELAY = 60 * 1000 // 1 min after init
 
 let intervalId: ReturnType<typeof setInterval> | null = null
+let startupId: ReturnType<typeof setTimeout> | null = null
 let listenersAttached = false
 
 async function runDigest(payload: Payload, siteUrl?: string): Promise<void> {
@@ -40,7 +41,8 @@ export function startAlertsScheduler(payload: Payload, siteUrl?: string): void {
   const intervalHours = Math.max(1, parseInt(process.env.SEO_ALERT_INTERVAL_HOURS || '24', 10) || 24)
   const intervalMs = intervalHours * 60 * 60 * 1000
 
-  setTimeout(() => {
+  startupId = setTimeout(() => {
+    startupId = null
     void runDigest(payload, siteUrl)
   }, STARTUP_DELAY)
 
@@ -59,6 +61,10 @@ export function startAlertsScheduler(payload: Payload, siteUrl?: string): void {
 }
 
 export function stopAlertsScheduler(): void {
+  if (startupId) {
+    clearTimeout(startupId)
+    startupId = null
+  }
   if (intervalId) {
     clearInterval(intervalId)
     intervalId = null

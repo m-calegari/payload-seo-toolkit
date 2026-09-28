@@ -14,6 +14,7 @@ const SNAPSHOT_INTERVAL = 24 * 60 * 60 * 1000 // 24 hours
 const STARTUP_DELAY = 30 * 1000 // 30 seconds after init
 
 let intervalId: ReturnType<typeof setInterval> | null = null
+let startupId: ReturnType<typeof setTimeout> | null = null
 let listenersAttached = false
 
 async function doSnapshot(payload: Payload, basePath: string, seoConfig?: SeoConfig): Promise<void> {
@@ -34,7 +35,8 @@ export function startRankTracker(payload: Payload, basePath: string, seoConfig?:
   // Idempotent — avoid leaking a previous interval / doubling the daily job on re-init.
   stopRankTracker()
 
-  setTimeout(() => {
+  startupId = setTimeout(() => {
+    startupId = null
     void doSnapshot(payload, basePath, seoConfig)
   }, STARTUP_DELAY)
 
@@ -53,6 +55,10 @@ export function startRankTracker(payload: Payload, basePath: string, seoConfig?:
 }
 
 export function stopRankTracker(): void {
+  if (startupId) {
+    clearTimeout(startupId)
+    startupId = null
+  }
   if (intervalId) {
     clearInterval(intervalId)
     intervalId = null

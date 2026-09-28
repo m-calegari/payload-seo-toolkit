@@ -56,7 +56,14 @@ export {
 
 // Re-export plugin
 export { seoAnalyzerPlugin, seoPlugin } from './plugin.js'
-export type { SeoPluginConfig, GenerateFnArgs } from './plugin.js'
+export type {
+  SeoPluginConfig,
+  GenerateFnArgs,
+  SeoModuleId,
+  SeoIntegrationId,
+  SeoBackgroundServiceId,
+  SeoCapabilityStatus,
+} from './plugin.js'
 
 // Re-export field definitions
 export { seoFields } from './fields.js'

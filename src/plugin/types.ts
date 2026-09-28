@@ -2,6 +2,7 @@ import type { Field } from 'payload'
 import type { SeoFeatures, RuleGroup, SeoThresholds } from '../types.js'
 import type { CollectionRoutes } from '../helpers/docUrl.js'
 import type { RetentionConfig } from '../retention.js'
+import type { CapabilityToggles, SeoBackgroundServiceId, SeoIntegrationId, SeoModuleId } from './capabilities.js'
 
 /** Arguments passed to generate functions (generateTitle, generateDescription, etc.) */
 export interface GenerateFnArgs {
@@ -78,10 +79,15 @@ export interface SeoPluginConfig {
    * takes over). Runtime kill-switch: set env `SEO_AUDIT_FILE_CACHE=0` to ignore the file.
    */
   auditCacheFile?: string
-  /** Granular feature flags — all default to true. Disable features you don't need
-   *  to reduce collections, endpoints, and admin views loaded by the plugin.
-   *  The core analyzer sidebar, validate endpoint, and meta fields are always active. */
+  /** @deprecated Use modules, integrations, and backgroundServices. Supplying this
+   * object preserves historical feature defaults before new toggles override them. */
   features?: SeoFeatures
+  /** Optional local capabilities. Omitted capabilities have zero registration/runtime cost. */
+  modules?: CapabilityToggles<SeoModuleId>
+  /** Optional external providers. Credentials remain server-only. */
+  integrations?: CapabilityToggles<SeoIntegrationId>
+  /** Explicit in-process jobs. These are not distributed schedulers. */
+  backgroundServices?: CapabilityToggles<SeoBackgroundServiceId>
   /** Custom function to generate meta title */
   generateTitle?: (args: GenerateFnArgs) => string | Promise<string>
   /** Custom function to generate meta description */
@@ -134,5 +140,3 @@ export interface SeoPluginConfig {
    */
   retentionDays?: RetentionConfig
 }
-
-

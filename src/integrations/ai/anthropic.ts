@@ -1,16 +1,20 @@
 import { providerHttpError } from '../../core/security/providerError.js'
 import { fetchWithRetry } from '../../helpers/fetchWithRetry.js'
+import type { AiMessageResponse, AiProvider } from './provider.js'
 
-export interface AnthropicMessageResponse {
-  stop_reason?: string
-  content?: Array<{ type: string; text?: string }>
+export function createAnthropicProvider(apiKey: string): AiProvider {
+  return {
+    id: 'anthropic',
+    capabilities: ['rewriteMetadata', 'optimizeContent', 'contentBrief', 'altText'],
+    requestMessage: (request) => requestAnthropicMessage(apiKey, request),
+  }
 }
 
 /** Anthropic transport boundary; authorization and content selection stay in endpoints. */
 export async function requestAnthropicMessage(
   apiKey: string,
   request: Record<string, unknown>,
-): Promise<AnthropicMessageResponse> {
+): Promise<AiMessageResponse> {
   const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -21,5 +25,5 @@ export async function requestAnthropicMessage(
     body: JSON.stringify(request),
   })
   if (!response.ok) throw providerHttpError('Anthropic', response)
-  return response.json() as Promise<AnthropicMessageResponse>
+  return response.json() as Promise<AiMessageResponse>
 }

@@ -29,6 +29,7 @@ import { registerCollections } from './registerCollections.js'
 import { registerEndpoints } from './registerEndpoints.js'
 import { registerLifecycle } from './registerLifecycle.js'
 export type { GenerateFnArgs, SeoPluginConfig } from './types.js'
+export type { SeoModuleId, SeoIntegrationId, SeoBackgroundServiceId, SeoCapabilityStatus } from './capabilities.js'
 
 export const seoAnalyzerPlugin =
   (pluginConfig: SeoPluginConfig = {}): Plugin =>
@@ -50,13 +51,13 @@ export const seoAnalyzerPlugin =
     registerCollections(config, pluginConfig, normalized)
     registerEndpoints(config, pluginConfig, normalized)
 
-    registerAdmin(config, pluginConfig, features)
+    registerAdmin(config, pluginConfig, features, normalized.capabilities)
     registerLifecycle(config, {
       basePath,
       targetCollections,
       targetGlobals,
       seoConfig,
-      features,
+      capabilities: normalized.capabilities,
       pluginConfig,
     })
 

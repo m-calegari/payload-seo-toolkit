@@ -1,5 +1,6 @@
 import type { SeoConfig, SeoFeatures } from '../types.js'
 import type { SeoPluginConfig } from './types.js'
+import { capabilitiesToLegacyFeatures, createCapabilityRegistry, type SeoCapabilityRegistry } from './capabilities.js'
 
 export interface NormalizedPluginConfig {
   targetCollections: string[]
@@ -9,33 +10,13 @@ export interface NormalizedPluginConfig {
   redirectsSlug: string
   allowExternalRedirects: boolean
   features: Required<SeoFeatures>
+  capabilities: SeoCapabilityRegistry
   seoConfig: SeoConfig
   analyzerLocaleOptions: Pick<SeoPluginConfig, 'locale' | 'localeMapping'>
 }
 
 export function normalizeFeatures(features?: SeoFeatures): Required<SeoFeatures> {
-  return {
-    analyzer: true,
-    dashboard: true,
-    redirects: true,
-    performance: true,
-    linkGraph: true,
-    keywords: true,
-    cannibalization: true,
-    schemaBuilder: true,
-    sitemapAudit: true,
-    seoLogs: true,
-    scoreHistory: true,
-    externalLinks: true,
-    aiFeatures: true,
-    duplicateContent: true,
-    settings: true,
-    gscApi: false,
-    warmCache: true,
-    alerts: false,
-    indexNow: false,
-    ...features,
-  }
+  return capabilitiesToLegacyFeatures(createCapabilityRegistry({ features }))
 }
 
 export function buildSeoConfig(pluginConfig: SeoPluginConfig): SeoConfig {
@@ -53,6 +34,7 @@ export function buildSeoConfig(pluginConfig: SeoPluginConfig): SeoConfig {
 }
 
 export function normalizePluginConfig(pluginConfig: SeoPluginConfig): NormalizedPluginConfig {
+  const capabilities = createCapabilityRegistry(pluginConfig)
   return {
     targetCollections: pluginConfig.collections ?? ['pages', 'posts'],
     targetGlobals: pluginConfig.globals ?? [],
@@ -60,7 +42,8 @@ export function normalizePluginConfig(pluginConfig: SeoPluginConfig): Normalized
     basePath: pluginConfig.endpointBasePath ?? '/seo-plugin',
     redirectsSlug: pluginConfig.redirectsCollection ?? 'seo-redirects',
     allowExternalRedirects: pluginConfig.allowExternalRedirects === true,
-    features: normalizeFeatures(pluginConfig.features),
+    features: capabilitiesToLegacyFeatures(capabilities),
+    capabilities,
     seoConfig: buildSeoConfig(pluginConfig),
     analyzerLocaleOptions: { locale: pluginConfig.locale, localeMapping: pluginConfig.localeMapping },
   }

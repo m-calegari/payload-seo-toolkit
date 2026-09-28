@@ -85,7 +85,7 @@ export function registerEndpoints(
   pluginConfig: SeoPluginConfig,
   normalized: NormalizedPluginConfig,
 ): void {
-  const { targetCollections, uploadsCollection, targetGlobals, basePath, seoConfig, features, redirectsSlug, allowExternalRedirects } = normalized
+  const { targetCollections, uploadsCollection, targetGlobals, basePath, seoConfig, features, capabilities, redirectsSlug, allowExternalRedirects } = normalized
   // Rate limiter for expensive POST endpoints (LLM calls, heavy crawls): 10 req / 60s per IP.
   const expensiveEndpointLimiter = createRateLimiter(10, 60_000)
   // Separate, poll-friendly limiter for the background-built audits. These GET endpoints are
@@ -202,8 +202,8 @@ export function registerEndpoints(
   // Settings
   if (features.settings) {
     pluginEndpoints.push(
-      { path: `${basePath}/settings`, method: 'get', handler: createSettingsHandler(targetCollections, seoConfig) },
-      { path: `${basePath}/settings`, method: 'patch', handler: createSettingsHandler(targetCollections, seoConfig) },
+      { path: `${basePath}/settings`, method: 'get', handler: createSettingsHandler(targetCollections, seoConfig, capabilities.publicStatus()) },
+      { path: `${basePath}/settings`, method: 'patch', handler: createSettingsHandler(targetCollections, seoConfig, capabilities.publicStatus()) },
     )
   }
   
@@ -274,9 +274,10 @@ export function registerEndpoints(
     pluginEndpoints.push(
       { path: `${basePath}/performance`, method: 'get', handler: withRateLimit(createPerformanceHandler()) },
       { path: `${basePath}/performance`, method: 'post', handler: withRateLimit(createPerformanceHandler()) },
-      // Core Web Vitals via PageSpeed Insights — informational, on-demand, SSRF-safe
-      { path: `${basePath}/core-web-vitals`, method: 'get', handler: withRateLimit(createCoreWebVitalsHandler(seoConfig)) },
     )
+  }
+  if (capabilities.isEnabled('pageSpeed')) {
+    pluginEndpoints.push({ path: `${basePath}/core-web-vitals`, method: 'get', handler: withRateLimit(createCoreWebVitalsHandler(seoConfig)) })
   }
   
   // Google Search Console (OAuth2) — opt-in (requires Google Cloud setup + secrets)
@@ -296,7 +297,7 @@ export function registerEndpoints(
   }
   
   // Monitoring & alerts (opt-in)
-  if (features.alerts) {
+  if (capabilities.isEnabled('alerts')) {
     pluginEndpoints.push(
       { path: `${basePath}/alerts-digest`, method: 'get', handler: createAlertsDigestHandler() },
       { path: `${basePath}/alerts-run`, method: 'post', handler: withRateLimit(createAlertsRunHandler(resolveGscSiteUrl(seoConfig))) },
@@ -306,7 +307,7 @@ export function registerEndpoints(
   // Retention purge (opt-in) — only exists when a window is actually configured,
   // so a host that never asked for it has no delete route at all.
   const retentionTargets = resolveRetention(pluginConfig.retentionDays)
-  if (retentionTargets.length > 0) {
+  if (capabilities.isEnabled('retention') && retentionTargets.length > 0) {
     pluginEndpoints.push(
       { path: `${basePath}/retention`, method: 'get', handler: createRetentionStatusHandler(pluginConfig.retentionDays!) },
       { path: `${basePath}/retention`, method: 'post', handler: withRateLimit(createRetentionPurgeHandler(pluginConfig.retentionDays!)) },
@@ -370,7 +371,7 @@ export function registerEndpoints(
   pluginEndpoints.push({
     path: `${basePath}/health`,
     method: 'get' as const,
-    handler: createSeoHealthHandler(basePath, seoConfig),
+    handler: createSeoHealthHandler(basePath, seoConfig, capabilities.publicStatus()),
   })
   
   // robots.txt and sitemap.xml — always active (public endpoints)
@@ -390,12 +391,15 @@ export function registerEndpoints(
       method: 'get' as const,
       handler: createSitemapHandler(targetCollections, seoConfig),
     },
+  )
+  if (capabilities.isEnabled('llmsTxt')) pluginEndpoints.push(
     {
-      // AI discoverability (opt-in via SEO_LLMS_TXT=1; returns 404 when disabled). Not scored.
       path: `${basePath}/llms.txt`,
       method: 'get' as const,
       handler: createLlmsTxtHandler(targetCollections, seoConfig),
     },
+  )
+  if (capabilities.isEnabled('specializedSitemaps')) pluginEndpoints.push(
     {
       path: `${basePath}/sitemap-news.xml`,
       method: 'get' as const,

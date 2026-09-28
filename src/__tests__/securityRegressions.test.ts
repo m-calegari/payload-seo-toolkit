@@ -517,7 +517,7 @@ describe('SEO-05 residue — every LLM endpoint is rate limited', () => {
       admin: {},
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any
-    return seoAnalyzerPlugin({ collections: ['pages'] })(config).endpoints || []
+    return seoAnalyzerPlugin({ collections: ['pages'], integrations: { ai: true } })(config).endpoints || []
   }
 
   for (const path of ['/seo-plugin/ai-rewrite', '/seo-plugin/ai-optimize']) {

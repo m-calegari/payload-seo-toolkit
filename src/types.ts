@@ -178,9 +178,8 @@ export interface SeoConfig {
 }
 
 /**
- * Granular feature flags for the SEO plugin.
- * All features default to `true`. Set a feature to `false` to disable it
- * and avoid loading its collections, endpoints, and admin views.
+ * Deprecated compatibility flags for the SEO plugin. Supplying this object opts
+ * into historical defaults; new installations should use the M6 capability maps.
  *
  * The core analyzer sidebar, validate endpoint, and meta fields are always active.
  */
@@ -218,8 +217,8 @@ export interface SeoFeatures {
    */
   gscApi?: boolean
   /**
-   * Background cache warm-up on init + hourly (pre-loads collection data). Enabled by
-   * default. Set to `false` on low-memory hosting to avoid loading all documents at startup.
+   * Background cache warm-up on init + hourly. Historical feature mode defaults it
+   * on; the M6 background-service API requires explicit activation.
    */
   warmCache?: boolean
   /** Duplicate content detection (endpoint) */
