@@ -12,8 +12,12 @@ import type { PayloadHandler } from 'payload'
 import { parseJsonBody } from '../helpers/parseBody.js'
 
 import { isSeoAdminRequest as isAdmin, isSeoPanelUser } from '../helpers/isAdmin.js'
+import { validateTechnicalSeoSettings } from '../core/technicalSeo/index.js'
+import { invalidateTechnicalSeoPolicyCache, technicalSeoSettingsInput } from '../payload/technicalSeo/settings.js'
+import { invalidateTechnicalSeoCaches } from '../payload/technicalSeo/cache.js'
+import { sanitizeRobotsRules } from '../helpers/robotsSafety.js'
 
-export function createSettingsHandler(): PayloadHandler {
+export function createSettingsHandler(targetCollections: string[] = []): PayloadHandler {
   return async (req) => {
     try {
       if (!isSeoPanelUser(req)) {
@@ -39,13 +43,16 @@ export function createSettingsHandler(): PayloadHandler {
         const rawBody = await parseJsonBody(req)
 
         // Whitelist allowed fields — strip everything else
-        const ALLOWED_FIELDS = ['siteName', 'ignoredSlugs', 'disabledRules', 'thresholds', 'sitemap', 'breadcrumb', 'robotsCustomRules']
+        const ALLOWED_FIELDS = ['siteName', 'ignoredSlugs', 'disabledRules', 'thresholds', 'sitemap', 'technicalSeo', 'robots', 'breadcrumb', 'robotsCustomRules']
         const body: Record<string, unknown> = {}
         for (const key of ALLOWED_FIELDS) {
           if (rawBody[key] !== undefined) {
             body[key] = rawBody[key]
           }
         }
+        if (body.robotsCustomRules !== undefined) body.robotsCustomRules = sanitizeRobotsRules(body.robotsCustomRules)
+        const errors = validateTechnicalSeoSettings(technicalSeoSettingsInput(body), targetCollections)
+        if (errors.length) return Response.json({ error: 'Invalid technical SEO settings', details: errors }, { status: 400 })
 
         // Find existing or create
         const result = await req.payload.find({
@@ -69,6 +76,9 @@ export function createSettingsHandler(): PayloadHandler {
             overrideAccess: true,
           })
         }
+
+        invalidateTechnicalSeoCaches()
+        invalidateTechnicalSeoPolicyCache(req.payload)
 
         return Response.json({ settings, success: true })
       }

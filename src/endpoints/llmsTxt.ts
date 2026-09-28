@@ -16,7 +16,9 @@ import { resolveDocumentUrl } from '../core/urls/resolver.js'
 import { resolveSiteModel } from '../helpers/siteModel.js'
 import type { SeoConfig } from '../types.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
-import { isPublicSeoDocument } from '../helpers/publicSeoDocument.js'
+import { isPubliclyReadableDocument } from '../helpers/publicSeoDocument.js'
+import { resolveTechnicalSeo } from '../core/technicalSeo/index.js'
+import { loadTechnicalSeoPolicy } from '../payload/technicalSeo/settings.js'
 
 /** Recommended max size for llms.txt (~8 KB per llmstxt.org guidance). */
 const MAX_BYTES = 8 * 1024
@@ -107,6 +109,7 @@ export function createLlmsTxtHandler(
       const siteUrl = siteModel.origin ?? ''
       const siteName = resolveSiteName(seoConfig, siteUrl)
       const siteDescription = (seoConfig as { siteDescription?: string } | undefined)?.siteDescription
+      const { policy } = await loadTechnicalSeoPolicy(req.payload, targetCollections)
 
       const fetched = await fetchAllDocs(req.payload, {
         collections: targetCollections,
@@ -121,10 +124,12 @@ export function createLlmsTxtHandler(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const d = doc as any
         // Skip drafts / explicitly non-indexed docs.
-        if (!isPublicSeoDocument(d)) continue
         const slug: string = (d.slug as string) || ''
         if (!slug) continue
-        const documentUrl = resolveDocumentUrl(siteModel, { collection: sourceSlug, slug })
+        const identity = { collection: sourceSlug, slug }
+        const effective = resolveTechnicalSeo({ siteModel, policy, identity, document: d, publicEligible: isPubliclyReadableDocument(d) })
+        if (!effective.index) continue
+        const documentUrl = resolveDocumentUrl(siteModel, identity)
         if (!documentUrl) continue
         const title: string = (d.title as string) || (d?.meta?.title as string) || slug
         const description: string | undefined =

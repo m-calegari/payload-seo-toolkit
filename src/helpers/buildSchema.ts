@@ -11,8 +11,10 @@ import type { CollectionRoutes } from './docUrl.js'
 import { resolveDocumentPath, resolveDocumentUrl } from '../core/urls/resolver.js'
 import { resolveSiteModel } from './siteModel.js'
 import type { SiteModel } from '../core/urls/siteModel.js'
+import { normalizeTechnicalSeoPolicy, resolveSiteIdentity, type TechnicalSeoPolicy } from '../core/technicalSeo/index.js'
 
 export const SCHEMA_TYPES = [
+  'WebPage',
   'Article',
   'LocalBusiness',
   'BreadcrumbList',
@@ -46,8 +48,6 @@ export function getSchemaImageUrl(
 
 /** Detect schema type from collection slug and document content. */
 export function detectSchemaType(collection: string, doc: Record<string, unknown>): SchemaType {
-  if (collection === 'posts') return 'Article'
-
   const layout = doc.layout as unknown[] | undefined
   if (layout && Array.isArray(layout)) {
     const hasFaqBlock = layout.some((block) => {
@@ -58,7 +58,7 @@ export function detectSchemaType(collection: string, doc: Record<string, unknown
     if (hasFaqBlock) return 'FAQPage'
   }
 
-  if (doc.price !== undefined || doc.sku !== undefined || collection === 'products') {
+  if (doc.price !== undefined || doc.sku !== undefined) {
     return 'Product'
   }
 
@@ -67,7 +67,8 @@ export function detectSchemaType(collection: string, doc: Record<string, unknown
     return 'LocalBusiness'
   }
 
-  return 'Article'
+  const policy = normalizeTechnicalSeoPolicy(undefined, [collection])
+  return policy.collections[collection]?.schema.defaultType ?? 'WebPage'
 }
 
 /**
@@ -346,7 +347,7 @@ function buildProductSchema(doc: Record<string, unknown>, siteUrl: string, docUr
   return schema
 }
 
-function buildOrganizationSchema(doc: Record<string, unknown>, siteUrl: string): Record<string, unknown> {
+function buildOrganizationSchema(doc: Record<string, unknown>, siteUrl: string, organizationId: string | null): Record<string, unknown> {
   const meta = (doc.meta || {}) as Record<string, unknown>
 
   const schema: Record<string, unknown> = {
@@ -355,6 +356,7 @@ function buildOrganizationSchema(doc: Record<string, unknown>, siteUrl: string):
     name: doc.title || meta.title || '',
     description: meta.description || '',
     url: siteUrl,
+    ...(organizationId ? { '@id': organizationId } : {}),
   }
 
   if (doc.logo) {
@@ -470,6 +472,21 @@ export interface BuildJsonLdOptions {
    * 404s. Pass `{ posts: '' }` if your posts are served flat.
    */
   collectionRoutes?: CollectionRoutes
+  technicalSeoPolicy?: TechnicalSeoPolicy
+}
+
+function buildWebPageSchema(doc: Record<string, unknown>, siteModel: SiteModel, docUrl: string): Record<string, unknown> {
+  const meta = (doc.meta || {}) as Record<string, unknown>
+  const identity = resolveSiteIdentity(siteModel)
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    '@id': `${docUrl}#webpage`,
+    url: docUrl,
+    name: meta.title || doc.title,
+    description: meta.description,
+    ...(identity.websiteId ? { isPartOf: { '@id': identity.websiteId } } : {}),
+  }
 }
 
 /**
@@ -485,7 +502,10 @@ export function buildJsonLd(
     collectionRoutes: options.collectionRoutes,
   }, options.collection ? [options.collection] : [])
   const siteUrl = siteModel.origin ?? ''
-  const schemaType = options.type || detectSchemaType(options.collection || '', doc)
+  const collection = options.collection || ''
+  const collectionPolicy = options.technicalSeoPolicy ?? normalizeTechnicalSeoPolicy(undefined, [collection])
+  const detected = detectSchemaType(collection, doc)
+  const schemaType = options.type || (detected !== 'WebPage' ? detected : collectionPolicy.collections[collection]?.schema.defaultType ?? 'WebPage') as SchemaType
   // Resolved once and threaded down: every node that points at "this document"
   // must use the same public URL, prefixed by the collection route.
   const identity = { collection: options.collection ?? '', slug: (doc.slug as string) || '' }
@@ -493,6 +513,9 @@ export function buildJsonLd(
 
   let jsonLd: Record<string, unknown>
   switch (schemaType) {
+    case 'WebPage':
+      jsonLd = buildWebPageSchema(doc, siteModel, docUrl)
+      break
     case 'Article':
       jsonLd = buildArticleSchema(doc, siteUrl, docUrl)
       break
@@ -509,7 +532,7 @@ export function buildJsonLd(
       jsonLd = buildProductSchema(doc, siteUrl, docUrl)
       break
     case 'Organization':
-      jsonLd = buildOrganizationSchema(doc, siteUrl)
+      jsonLd = buildOrganizationSchema(doc, siteUrl, resolveSiteIdentity(siteModel).organizationId)
       break
     case 'Person':
       jsonLd = buildPersonSchema(doc, siteUrl, docUrl)

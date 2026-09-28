@@ -22,7 +22,10 @@ import { resolveDocumentPath, resolveDocumentUrl } from '../core/urls/resolver.j
 import { resolveSiteModel } from '../helpers/siteModel.js'
 import { seoCache } from '../cache.js'
 import type { SeoConfig } from '../types.js'
-import { isPublicSeoDocument, publicSeoReadAccess } from '../helpers/publicSeoDocument.js'
+import { isPubliclyReadableDocument, publicSeoReadAccess } from '../helpers/publicSeoDocument.js'
+import { resolveTechnicalSeo, type TechnicalSeoPolicy } from '../core/technicalSeo/index.js'
+import type { SiteModel } from '../core/urls/index.js'
+import { loadTechnicalSeoPolicy, policyCacheScope } from '../payload/technicalSeo/settings.js'
 
 /**
  * Cache key bases for the three rendered documents, scoped by the collections the
@@ -84,6 +87,8 @@ async function eachPublishedDoc(
   payload: Payload,
   collections: string[],
   depth: number,
+  siteModel: SiteModel,
+  policy: TechnicalSeoPolicy,
   onDoc: (doc: Record<string, unknown>, collection: string) => void,
 ): Promise<void> {
   const BATCH = Math.min(100, Math.max(1, parseInt(process.env.SEO_SITEMAP_BATCH_SIZE || '50', 10) || 50))
@@ -105,7 +110,9 @@ async function eachPublishedDoc(
           // same way.
           if (count >= MAX) return
           count++
-          if (!isPublicSeoDocument(doc)) continue
+          const identity = { collection, slug: String(doc.slug ?? '') }
+          const effective = resolveTechnicalSeo({ siteModel, policy, identity, document: doc, publicEligible: isPubliclyReadableDocument(doc) })
+          if (!effective.sitemap.include) continue
           // Same noindex filter as sitemap.xml / llms.txt: news, image and video
           // sitemaps are public too.
           onDoc(doc, collection)
@@ -124,14 +131,13 @@ async function eachPublishedDoc(
 // GET /sitemap-news.xml — articles from the last 48h (depth 0, lightweight)
 // ---------------------------------------------------------------------------
 export function createNewsSitemapHandler(targetCollections: string[], seoConfig?: SeoConfig): PayloadHandler {
-  const cacheKey = `${SITEMAP_NEWS_CACHE_BASE}:${targetCollections.join(',')}`
   return async (req) => {
     try {
-      // Serve the rendered XML while it is still warm — see the file header.
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const { policy } = await loadTechnicalSeoPolicy(req.payload, targetCollections)
+      const cacheKey = `${SITEMAP_NEWS_CACHE_BASE}:${targetCollections.join(',')}:${policyCacheScope(policy, siteModel.origin, seoConfig?.locale)}`
       const cachedXml = seoCache.get<string>(cacheKey)
       if (typeof cachedXml === 'string') return xmlResponse(cachedXml)
-
-      const siteModel = resolveSiteModel(seoConfig, targetCollections)
       const siteUrl = siteModel.origin ?? ''
       const language = seoConfig?.locale === 'en' ? 'en' : 'fr'
       // Publication name: configured siteName, else the host.
@@ -147,7 +153,7 @@ export function createNewsSitemapHandler(targetCollections: string[], seoConfig?
       const cutoff = Date.now() - 48 * 3_600_000
       const entries: string[] = []
 
-      await eachPublishedDoc(req.payload, targetCollections, 0, (doc, collection) => {
+      await eachPublishedDoc(req.payload, targetCollections, 0, siteModel, policy, (doc, collection) => {
         const dateStr =
           (typeof doc.publishedAt === 'string' && doc.publishedAt) ||
           (typeof doc.date === 'string' && doc.date) ||
@@ -179,18 +185,17 @@ export function createNewsSitemapHandler(targetCollections: string[], seoConfig?
 // GET /sitemap-images.xml — images per page (batched depth 1)
 // ---------------------------------------------------------------------------
 export function createImageSitemapHandler(targetCollections: string[], seoConfig?: SeoConfig): PayloadHandler {
-  const cacheKey = `${SITEMAP_IMAGES_CACHE_BASE}:${targetCollections.join(',')}`
   return async (req) => {
     try {
-      // Serve the rendered XML while it is still warm — see the file header.
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const { policy } = await loadTechnicalSeoPolicy(req.payload, targetCollections)
+      const cacheKey = `${SITEMAP_IMAGES_CACHE_BASE}:${targetCollections.join(',')}:${policyCacheScope(policy, siteModel.origin, seoConfig?.locale)}`
       const cachedXml = seoCache.get<string>(cacheKey)
       if (typeof cachedXml === 'string') return xmlResponse(cachedXml)
-
-      const siteModel = resolveSiteModel(seoConfig, targetCollections)
       const siteUrl = siteModel.origin ?? ''
       const entries: string[] = []
 
-      await eachPublishedDoc(req.payload, targetCollections, 1, (doc, collection) => {
+      await eachPublishedDoc(req.payload, targetCollections, 1, siteModel, policy, (doc, collection) => {
         const urls = new Set<string>()
         collectMediaUrls(doc, 'image/', siteUrl, urls)
         if (urls.size === 0) return
@@ -217,18 +222,17 @@ export function createImageSitemapHandler(targetCollections: string[], seoConfig
 // GET /sitemap-video.xml — video objects per page (batched depth 1)
 // ---------------------------------------------------------------------------
 export function createVideoSitemapHandler(targetCollections: string[], seoConfig?: SeoConfig): PayloadHandler {
-  const cacheKey = `${SITEMAP_VIDEO_CACHE_BASE}:${targetCollections.join(',')}`
   return async (req) => {
     try {
-      // Serve the rendered XML while it is still warm — see the file header.
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const { policy } = await loadTechnicalSeoPolicy(req.payload, targetCollections)
+      const cacheKey = `${SITEMAP_VIDEO_CACHE_BASE}:${targetCollections.join(',')}:${policyCacheScope(policy, siteModel.origin, seoConfig?.locale)}`
       const cachedXml = seoCache.get<string>(cacheKey)
       if (typeof cachedXml === 'string') return xmlResponse(cachedXml)
-
-      const siteModel = resolveSiteModel(seoConfig, targetCollections)
       const siteUrl = siteModel.origin ?? ''
       const entries: string[] = []
 
-      await eachPublishedDoc(req.payload, targetCollections, 1, (doc, collection) => {
+      await eachPublishedDoc(req.payload, targetCollections, 1, siteModel, policy, (doc, collection) => {
         const meta = (doc.meta || {}) as Record<string, unknown>
         const videoUrls = new Set<string>()
         collectMediaUrls(doc, 'video/', siteUrl, videoUrls)

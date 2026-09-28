@@ -11,6 +11,7 @@ import { createSeoRankHistoryCollection } from '../collections/SeoRankHistory.js
 import type { SeoPluginConfig } from './types.js'
 import type { NormalizedPluginConfig } from './config.js'
 import { registerCollectionHooks, registerGlobalHooks } from './registerHooks.js'
+import { hasCompatiblePayloadSeoMeta } from '../payload/compatibility/payloadSeo.js'
 
 /** Register fields, hooks, and plugin-managed collections without owning composition. */
 export function registerCollections(
@@ -28,27 +29,6 @@ export function registerCollections(
     redirectsSlug,
     allowExternalRedirects,
   } = normalized
-  // Helper: detect if a collection already has @payloadcms/plugin-seo meta fields
-  function hasExistingSeoMeta(fields: unknown[]): boolean {
-    return fields.some((field) => {
-      const f = field as Record<string, unknown>
-      if (f.type === 'tabs' && Array.isArray(f.tabs)) {
-        return (f.tabs as Array<Record<string, unknown>>).some((tab) => {
-          if (tab.name !== 'meta') return false
-          const tabFields = (tab.fields || []) as Array<Record<string, unknown>>
-          const fieldNames = tabFields.map((tf) => tf.name).filter(Boolean)
-          return fieldNames.includes('title') && fieldNames.includes('description')
-        })
-      }
-      if (f.name === 'meta' && f.type === 'group') {
-        const groupFields = (f.fields || []) as Array<Record<string, unknown>>
-        const fieldNames = groupFields.map((gf) => gf.name).filter(Boolean)
-        return fieldNames.includes('title') && fieldNames.includes('description')
-      }
-      return false
-    })
-  }
-  
   // Build meta fields config
   const metaFieldsConfig = {
     uploadsCollection: pluginConfig.uploadsCollection ?? 'media',
@@ -119,7 +99,7 @@ export function registerCollections(
     config.collections = config.collections.map((collection) => {
       if (targetCollections.includes(collection.slug)) {
         const existingFields = (collection.fields || []) as Field[]
-        const hasSeoMeta = hasExistingSeoMeta(existingFields)
+        const hasSeoMeta = hasCompatiblePayloadSeoMeta(existingFields)
   
         // Determine which fields to add
         const fieldsToAdd = [...seoFields(analyzerLocaleOptions)]
@@ -163,7 +143,7 @@ export function registerCollections(
       if (!targetGlobals.includes(global.slug)) return global
   
       const existingFields = global.fields || []
-      const hasSeoMeta = hasExistingSeoMeta(existingFields)
+      const hasSeoMeta = hasCompatiblePayloadSeoMeta(existingFields)
   
       const fieldsToAdd = [...seoFields(analyzerLocaleOptions)]
       if (!hasSeoMeta && pluginConfig.autoCreateMetaFields !== false) {
@@ -185,7 +165,7 @@ export function registerCollections(
   const hasExistingRedirects = config.collections?.some((c) => c.slug === redirectsSlug)
   const pluginCollections = []
   if (trackHistory) pluginCollections.push(createSeoScoreHistoryCollection())
-  if (features.settings) pluginCollections.push(createSeoSettingsCollection())
+  if (features.settings) pluginCollections.push(createSeoSettingsCollection(targetCollections))
   if (features.redirects && !hasExistingRedirects) pluginCollections.push(createSeoRedirectsCollection(redirectsSlug, allowExternalRedirects))
   if (features.performance) pluginCollections.push(createSeoPerformanceCollection())
   if (features.seoLogs) pluginCollections.push(createSeoLogsCollection())

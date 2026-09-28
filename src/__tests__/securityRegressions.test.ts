@@ -945,7 +945,9 @@ describe('SEO-12 — the public sitemap extensions are cached and really bounded
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
 
-    expect(payload.find.mock.calls.length).toBeLessThanOrEqual(3)
+    // One bounded control-plane read loads the normalized technical SEO policy;
+    // document reads remain capped independently.
+    expect(payload.find.mock.calls.length).toBeLessThanOrEqual(4)
   })
 
   it('still emits up to the cap when the documents are publishable', async () => {

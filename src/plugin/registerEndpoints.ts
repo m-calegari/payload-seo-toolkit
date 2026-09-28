@@ -202,8 +202,8 @@ export function registerEndpoints(
   // Settings
   if (features.settings) {
     pluginEndpoints.push(
-      { path: `${basePath}/settings`, method: 'get', handler: createSettingsHandler() },
-      { path: `${basePath}/settings`, method: 'patch', handler: createSettingsHandler() },
+      { path: `${basePath}/settings`, method: 'get', handler: createSettingsHandler(targetCollections) },
+      { path: `${basePath}/settings`, method: 'patch', handler: createSettingsHandler(targetCollections) },
     )
   }
   

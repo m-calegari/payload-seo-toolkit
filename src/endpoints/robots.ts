@@ -11,6 +11,12 @@ import { sanitizeRobotsRules } from '../helpers/robotsSafety.js'
 import { isSeoAdminRequest as isAdmin, isSeoPanelUser } from '../helpers/isAdmin.js'
 import type { SeoConfig } from '../types.js'
 import { resolveSiteModel } from '../helpers/siteModel.js'
+import { buildRobotsTxt, normalizeRobotsPolicy } from '../core/technicalSeo/index.js'
+import { seoCache } from '../cache.js'
+import { invalidateTechnicalSeoCaches } from '../payload/technicalSeo/cache.js'
+import { invalidateTechnicalSeoPolicyCache } from '../payload/technicalSeo/settings.js'
+
+export const ROBOTS_CACHE_BASE = 'robots-txt'
 
 /**
  * GET handler — generates robots.txt dynamically from seo-settings.
@@ -28,20 +34,19 @@ export function createRobotsHandler(targetCollections: string[], seoConfig?: Seo
       const config = settings.docs[0] as Record<string, any> | undefined
 
       const serverUrl = resolveSiteModel(seoConfig, targetCollections).origin ?? ''
-
-      let content = `User-agent: *\n`
-      content += `Allow: /\n`
-      content += `Disallow: /admin/*\n`
-      content += `Disallow: /api/*\n`
-
-      // Add custom rules from settings (sanitized — only valid directive lines).
-      const customRules = sanitizeRobotsRules(config?.robotsCustomRules)
-      if (customRules) {
-        content += customRules + '\n'
-      }
-
-      // Add sitemap reference
-      content += `\nSitemap: ${serverUrl}/sitemap.xml\n`
+      const robots = config?.robots as Record<string, unknown> | undefined
+      const policy = normalizeRobotsPolicy({
+        userAgent: robots?.userAgent,
+        allow: robots?.allow,
+        disallow: robots?.disallow,
+        advertiseSitemap: robots?.advertiseSitemap,
+        customRules: sanitizeRobotsRules(config?.robotsCustomRules),
+      })
+      const cacheKey = `${ROBOTS_CACHE_BASE}:${serverUrl}:${JSON.stringify(policy)}`
+      const cached = seoCache.get<string>(cacheKey)
+      if (cached) return new Response(cached, { headers: { 'Content-Type': 'text/plain' } })
+      const content = buildRobotsTxt(policy, serverUrl ? `${serverUrl}/sitemap.xml` : null)
+      seoCache.set(cacheKey, content)
 
       return new Response(content, {
         headers: { 'Content-Type': 'text/plain' },
@@ -97,6 +102,9 @@ export function createRobotsUpdateHandler(): PayloadHandler {
           overrideAccess: true,
         })
       }
+
+      invalidateTechnicalSeoCaches()
+      invalidateTechnicalSeoPolicyCache(req.payload)
 
       return Response.json({ settings, success: true })
     } catch (error) {

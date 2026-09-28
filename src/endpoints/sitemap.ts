@@ -10,7 +10,9 @@ import { resolveDocumentPath, resolveDocumentUrl } from '../core/urls/resolver.j
 import { resolveSiteModel } from '../helpers/siteModel.js'
 import { fetchAllDocs } from '../helpers/fetchAllDocs.js'
 import { seoCache } from '../cache.js'
-import { isPublicSeoDocument } from '../helpers/publicSeoDocument.js'
+import { isPubliclyReadableDocument } from '../helpers/publicSeoDocument.js'
+import { resolveTechnicalSeo } from '../core/technicalSeo/index.js'
+import { loadTechnicalSeoPolicy, policyCacheScope } from '../payload/technicalSeo/settings.js'
 
 /**
  * Cache key base for the rendered XML. Scoped by the collections the handler was
@@ -47,15 +49,6 @@ function escapeXml(str: string): string {
     .replace(/'/g, '&apos;')
 }
 
-/** Check if a slug matches a pattern (supports trailing wildcard: blog/*) */
-function matchesPattern(slug: string, pattern: string): boolean {
-  if (pattern.endsWith('/*')) {
-    const prefix = pattern.slice(0, -2)
-    return slug === prefix || slug.startsWith(prefix + '/')
-  }
-  return slug === pattern
-}
-
 interface SitemapUrl {
   loc: string
   lastmod?: string
@@ -71,8 +64,6 @@ export function createSitemapHandler(
   targetCollections: string[],
   seoConfig?: SeoConfig,
 ): PayloadHandler {
-  const cacheKey = `${SITEMAP_XML_CACHE_BASE}:${targetCollections.join(',')}`
-
   const xmlResponse = (xml: string) =>
     new Response(xml, {
       headers: {
@@ -88,31 +79,11 @@ export function createSitemapHandler(
       // on its only unauthenticated (and deliberately un-rate-limited) endpoint.
       // Staleness stays bounded by the cache TTL, which is well under the one-hour
       // Cache-Control this endpoint has always advertised.
+      const siteModel = resolveSiteModel(seoConfig, targetCollections)
+      const { policy } = await loadTechnicalSeoPolicy(req.payload, targetCollections)
+      const cacheKey = `${SITEMAP_XML_CACHE_BASE}:${targetCollections.join(',')}:${policyCacheScope(policy, siteModel.origin, seoConfig?.locale)}`
       const cachedXml = seoCache.get<string>(cacheKey)
       if (typeof cachedXml === 'string') return xmlResponse(cachedXml)
-
-      const siteModel = resolveSiteModel(seoConfig, targetCollections)
-
-      // Read sitemap config from seo-settings
-      const settingsResult = await req.payload.find({
-        collection: 'seo-settings',
-        limit: 1,
-        overrideAccess: true,
-      })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const config = settingsResult.docs[0] as Record<string, any> | undefined
-      const sitemapConfig = config?.sitemap || {}
-
-      const excludedSlugs: string[] = (sitemapConfig.excludedSlugs || []).map(
-        (entry: { slug: string }) => entry.slug,
-      )
-      const defaultChangefreq: string = sitemapConfig.defaultChangefreq || 'weekly'
-      const defaultPriority: number = sitemapConfig.defaultPriority ?? 0.5
-      const priorityOverrides: Array<{
-        slugPattern: string
-        priority: number
-        changefreq?: string
-      }> = sitemapConfig.priorityOverrides || []
 
       // Fetch all published documents from target collections
       const allDocs = await fetchAllDocs(req.payload, {
@@ -127,54 +98,25 @@ export function createSitemapHandler(
       for (const { doc, sourceSlug: collectionSlug } of allDocs) {
         // Anonymous collection access establishes public readability; this predicate
         // additionally enforces publication and indexability.
-        if (!isPublicSeoDocument(doc)) continue
+        const publicEligible = isPubliclyReadableDocument(doc)
 
         const slug: string = doc.slug || ''
 
-        // Skip excluded slugs
-        if (excludedSlugs.some((excluded) => matchesPattern(slug, excluded))) continue
-
-        const isHome = slug === 'home' || slug === ''
         // Prefix by the collection route (posts → /posts/<slug> by default):
         // emitting the bare slug for a `posts` document declares a 404 to
         // Googlebot and wastes crawl budget.
         const identity = { collection: collectionSlug, slug }
+        const technical = resolveTechnicalSeo({ siteModel, policy, identity, document: doc, publicEligible })
+        if (!technical.sitemap.include) continue
         const documentUrl = resolveDocumentUrl(siteModel, identity) ?? resolveDocumentPath(siteModel, identity)
-
-        // Determine priority and changefreq
-        let priority = defaultPriority
-        let changefreq = defaultChangefreq
-
-        // Home page always gets highest priority
-        if (isHome) {
-          priority = 1.0
-          changefreq = 'weekly'
-        } else if (collectionSlug === 'posts') {
-          // Blog posts default to slightly higher priority than generic default
-          priority = Math.max(priority, 0.7)
-          changefreq = 'weekly'
-        } else {
-          // Pages default
-          priority = Math.max(priority, 0.8)
-          changefreq = 'monthly'
-        }
-
-        // Apply priority overrides from settings
-        for (const override of priorityOverrides) {
-          if (matchesPattern(slug, override.slugPattern)) {
-            priority = override.priority
-            if (override.changefreq) changefreq = override.changefreq
-            break
-          }
-        }
 
         urls.push({
           loc: documentUrl,
           lastmod: doc.updatedAt
             ? new Date(doc.updatedAt).toISOString().split('T')[0]
             : undefined,
-          changefreq,
-          priority: priority.toFixed(1),
+          changefreq: technical.sitemap.changeFrequency,
+          priority: technical.sitemap.priority.toFixed(1),
         })
       }
 

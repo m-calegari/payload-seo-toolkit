@@ -12,8 +12,11 @@
 
 import type { CollectionConfig } from 'payload'
 import { isSeoAdminRequest, isSeoPanelUser } from '../helpers/isAdmin.js'
+import { SITEMAP_CHANGE_FREQUENCIES, TECHNICAL_SCHEMA_TYPES } from '../core/technicalSeo/index.js'
+import { invalidateTechnicalSeoCaches } from '../payload/technicalSeo/cache.js'
+import { invalidateTechnicalSeoPolicyCache } from '../payload/technicalSeo/settings.js'
 
-export function createSeoSettingsCollection(): CollectionConfig {
+export function createSeoSettingsCollection(targetCollections: readonly string[] = []): CollectionConfig {
   return {
     slug: 'seo-settings',
     admin: {
@@ -31,6 +34,10 @@ export function createSeoSettingsCollection(): CollectionConfig {
       create: ({ req }) => isSeoAdminRequest(req),
       update: ({ req }) => isSeoAdminRequest(req),
       delete: ({ req }) => isSeoAdminRequest(req),
+    },
+    hooks: {
+      afterChange: [({ doc, req }) => { invalidateTechnicalSeoCaches(); invalidateTechnicalSeoPolicyCache(req.payload); return doc }],
+      afterDelete: [({ doc, req }) => { invalidateTechnicalSeoCaches(); invalidateTechnicalSeoPolicyCache(req.payload); return doc }],
     },
     fields: [
       {
@@ -191,6 +198,40 @@ export function createSeoSettingsCollection(): CollectionConfig {
           description:
             'Additional rules to include in robots.txt (one per line). Example: Disallow: /private/',
         },
+      },
+      {
+        name: 'technicalSeo',
+        type: 'group',
+        label: 'Technical SEO policy',
+        fields: [{
+          name: 'collections',
+          type: 'array',
+          fields: [
+            {
+              name: 'collection', type: 'text', required: true,
+              validate: (value: unknown) => typeof value === 'string' && (targetCollections.length === 0 || targetCollections.includes(value))
+                ? true
+                : 'Collection must be one of the configured SEO collections',
+            },
+            { name: 'index', type: 'checkbox', defaultValue: true },
+            { name: 'follow', type: 'checkbox', defaultValue: true },
+            { name: 'sitemapEnabled', type: 'checkbox', defaultValue: true },
+            { name: 'sitemapPriority', type: 'number', min: 0, max: 1, admin: { step: 0.1 } },
+            { name: 'sitemapChangeFrequency', type: 'select', options: SITEMAP_CHANGE_FREQUENCIES.map((value) => ({ label: value, value })) },
+            { name: 'defaultSchemaType', type: 'select', options: TECHNICAL_SCHEMA_TYPES.map((value) => ({ label: value, value })) },
+          ],
+        }],
+      },
+      {
+        name: 'robots',
+        type: 'group',
+        label: 'Robots policy',
+        fields: [
+          { name: 'userAgent', type: 'text', defaultValue: '*' },
+          { name: 'allow', type: 'array', fields: [{ name: 'path', type: 'text', required: true }] },
+          { name: 'disallow', type: 'array', fields: [{ name: 'path', type: 'text', required: true }] },
+          { name: 'advertiseSitemap', type: 'checkbox', defaultValue: true },
+        ],
       },
       {
         name: 'breadcrumb',

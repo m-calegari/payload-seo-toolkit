@@ -16,8 +16,9 @@
 
 import { getSchemaImageUrl } from './buildSchema.js'
 import type { CollectionRoutes } from './docUrl.js'
-import { resolveCanonicalUrl } from '../core/urls/resolver.js'
 import { resolveSiteModel } from './siteModel.js'
+import { normalizeTechnicalSeoPolicy, resolveTechnicalSeo, type TechnicalSeoPolicy } from '../core/technicalSeo/index.js'
+import { isPubliclyReadableDocument } from '../core/security/publicSeoDocument.js'
 
 export interface SeoMetadataOptions {
   /** Collection slug — used to pick the Open Graph type (posts → 'article') */
@@ -39,6 +40,10 @@ export interface SeoMetadataOptions {
    * Pass `{ posts: '' }` if your posts are served flat at `/<slug>`.
    */
   collectionRoutes?: CollectionRoutes
+  /** Optional normalized policy supplied by a server adapter. */
+  technicalSeoPolicy?: TechnicalSeoPolicy
+  /** Public ACL result. False is a hard noindex boundary. */
+  publicEligible?: boolean
 }
 
 export interface SeoMetadata {
@@ -61,26 +66,6 @@ export interface SeoMetadata {
     description?: string
     images?: string[]
   }
-}
-
-function parseRobots(
-  doc: Record<string, unknown>,
-  meta: Record<string, unknown>,
-): { index: boolean; follow: boolean } {
-  const raw =
-    (typeof meta.robots === 'string' && meta.robots) ||
-    (typeof doc.robots === 'string' && doc.robots) ||
-    ''
-  let noindex = false
-  let nofollow = false
-  if (raw) {
-    const low = raw.toLowerCase()
-    noindex = low.includes('noindex')
-    nofollow = low.includes('nofollow')
-  }
-  if (doc.noindex === true || meta.noindex === true) noindex = true
-  if (doc.nofollow === true || meta.nofollow === true) nofollow = true
-  return { index: !noindex, follow: !nofollow }
 }
 
 function buildLanguages(doc: Record<string, unknown>): Record<string, string> | undefined {
@@ -127,14 +112,15 @@ export function buildSeoMetadata(
   let image = getSchemaImageUrl(meta.image as Record<string, unknown> | undefined, heroMedia, siteUrl)
   if (!image && options.defaultImage) image = absoluteUrl(options.defaultImage, siteUrl)
 
-  const explicitCanonical =
-    (typeof meta.canonicalUrl === 'string' && meta.canonicalUrl) ||
-    (typeof doc.canonicalUrl === 'string' && doc.canonicalUrl) ||
-    ''
-  const canonical = resolveCanonicalUrl(siteModel, {
-    identity: { collection: options.collection ?? '', slug, locale: options.locale },
-    explicitCanonical,
-  }) ?? undefined
+  const collection = options.collection ?? ''
+  const technical = resolveTechnicalSeo({
+    siteModel,
+    policy: options.technicalSeoPolicy ?? normalizeTechnicalSeoPolicy(undefined, [collection]),
+    identity: { collection, slug, locale: options.locale },
+    document: doc,
+    publicEligible: options.publicEligible ?? isPubliclyReadableDocument(doc),
+  })
+  const canonical = technical.canonicalUrl ?? undefined
 
   const languages = buildLanguages(doc)
   const isPost = options.collection === 'posts' || doc.isPost === true
@@ -148,7 +134,7 @@ export function buildSeoMetadata(
   if (languages) alternates.languages = languages
   if (Object.keys(alternates).length) md.alternates = alternates
 
-  md.robots = parseRobots(doc, meta)
+  md.robots = { index: technical.index, follow: technical.follow }
 
   md.openGraph = {
     ...(rawTitle ? { title: rawTitle } : {}),
